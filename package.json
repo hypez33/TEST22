@@ -1,0 +1,24 @@
+{
+  "name": "budlife",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --ext .ts,.tsx --max-warnings=0"
+  },
+  "dependencies": {
+    "immer": "^10.0.4",
+    "next": "16.0.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.6",
+    "eslint": "^9.14.0",
+    "eslint-config-next": "16.0.3",
+    "typescript": "^5.6.3"
+  }
+}
