@@ -68,7 +68,7 @@ export const createInitialState = (): GameState => ({
   theme: 'dark',
   highContrast: false,
   compactMode: false,
-  cash: 0,
+  cash: 500000,
   level: 1,
   xp: 0,
   totalCashEarned: 0,

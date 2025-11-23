@@ -363,21 +363,17 @@ main{ padding: 40px 14px; max-width: 1100px; margin: 0 auto }
 .tab::before{ content:''; position:absolute; inset:0; background: linear-gradient(135deg, rgba(0,193,106,0.03), rgba(51,225,138,0.02)); pointer-events:none; z-index:-1 }
 
 .tab{
-
   padding: 24px 0 32px;
-
-  display:none;
-
-  opacity:0;
-
-  transform: translateY(14px);
-
-  transition: opacity .35s ease, transform .45s ease;
-
-  pointer-events:none;
-
-  will-change: opacity, transform;
-
+  display:flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  opacity:1;
+  transform: translateY(0);
+  pointer-events:auto;
+  gap: 12px;
+  min-height: calc(100vh - var(--header-h) - 20px);
+  overflow-y: auto;
 }
 
 
@@ -393,29 +389,7 @@ main{ padding: 40px 14px; max-width: 1100px; margin: 0 auto }
 }
 
 .tab.active{
-
-  display:flex;
-
-  flex-direction: column;
-
-  align-items: stretch;
-
-  justify-content: center; /* default: start */
-
-  opacity:1;
-
-  transform: translateY(0);
-
-  pointer-events:auto;
-
   animation: tabEnter .46s cubic-bezier(.16,.84,.44,1) both;
-
-  gap: 12px;
-
-  min-height: calc(100vh - var(--header-h) - 20px);
-
-  overflow-y: auto;
-
 }
 
 .tab.active.centered{ justify-content: center; }
@@ -3238,7 +3212,7 @@ button:active{ transform: translateY(0) scale(.98) !important; box-shadow: inset
 
 
 
-.cases-grid{ display:grid; grid-template-columns:minmax(240px, 280px) minmax(0, 1fr); gap:16px; margin-bottom:16px; }
+.cases-grid{ display:grid; grid-template-columns:minmax(240px, 280px) minmax(0, 1fr); gap:16px; margin-bottom:16px; align-items:flex-start; }
 
 .cases-control{ display:flex; flex-direction:column; gap:16px; }
 
@@ -3251,6 +3225,8 @@ button:active{ transform: translateY(0) scale(.98) !important; box-shadow: inset
 .case-buttons .accent, .case-buttons .ghost{ flex:1 1 140px; }
 
 
+
+.cases-reel-wrapper{ align-self:flex-start; height:auto; }
 
 .cases-reel-panel{ position:relative; display:flex; flex-direction:column; gap:14px; --cases-marker-rgb:255,214,0; --cases-marker-color: rgb(var(--cases-marker-rgb)); }
 
@@ -3302,9 +3278,9 @@ button:active{ transform: translateY(0) scale(.98) !important; box-shadow: inset
 
 
 
-.cases-stats{ display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:16px; }
+.cases-stats{ display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:16px; align-items:flex-start; }
 
-.case-stat{ background:var(--panel-soft); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:6px; }
+.case-stat{ background:var(--panel-soft); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:6px; height:auto; }
 
 .case-stat-label{ font-size:12px; color:var(--muted); letter-spacing:0.4px; text-transform:uppercase; }
 
