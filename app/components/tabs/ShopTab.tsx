@@ -5,6 +5,7 @@ import { GameState } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
 import { CONSUMABLE_PACKS, ITEMS } from '@/lib/game/data';
 import { fmtNumber } from '@/lib/game/utils';
+import { Tooltip } from '../ui/Tooltip';
 import { getAllStrains, itemCost, seedCost } from '@/lib/game/engine';
 import { CartPanel } from './cart/CartPanel';
 
@@ -67,9 +68,11 @@ export function ShopTab({ state, actions }: Props) {
                 return (
                   <div key={strain.id} className={`shop-item ${disabled ? 'disabled' : ''}`}>
                     <div className="shop-item-left">
-                      <div className="shop-item-name">
-                        {strain.name} <span className="pill muted">{strain.rarity}</span>
-                      </div>
+                      <Tooltip content={strain.desc || ''}>
+                        <div className="shop-item-name">
+                          {strain.name} <span className="pill muted">{strain.rarity}</span>
+                        </div>
+                      </Tooltip>
                       <div className="shop-item-desc">{strain.desc}</div>
                       <div className="shop-item-meta">Im Inventar: {count} • gekauft: {purchased}</div>
                     </div>
@@ -108,9 +111,11 @@ export function ShopTab({ state, actions }: Props) {
                 return (
                   <div key={item.id} className={`shop-item ${disabled ? 'disabled' : ''}`}>
                     <div className="shop-item-left">
-                      <div className="shop-item-name">
-                        {item.name} <span className="pill muted">{item.category}</span>
-                      </div>
+                      <Tooltip content={item.desc}>
+                        <div className="shop-item-name">
+                          {item.name} <span className="pill muted">{item.category}</span>
+                        </div>
+                      </Tooltip>
                       <div className="shop-item-desc">{item.desc}</div>
                       <div className="shop-item-meta">Besitz: {owned}</div>
                     </div>
@@ -147,7 +152,9 @@ export function ShopTab({ state, actions }: Props) {
                 return (
                 <div key={pack.id} className={`shop-item ${disabled ? 'disabled' : ''}`}>
                   <div className="shop-item-left">
-                    <div className="shop-item-name">{pack.name}</div>
+                    <Tooltip content={pack.desc}>
+                      <div className="shop-item-name">{pack.name}</div>
+                    </Tooltip>
                     <div className="shop-item-desc">{pack.desc}</div>
                   </div>
                   <div className="shop-item-right">

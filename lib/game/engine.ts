@@ -52,10 +52,13 @@ const DRY_PRICE_MULT = 1.5;
 const CURING_QUALITY_BONUS = 0.25;
 const CURING_QUALITY_CAP = 2.2;
 const WATER_COST = 0.2;
+const ROSIN_YIELD_MULT = 0.35;
+const ROSIN_MIN_QUALITY = 1;
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 export const createInitialState = (): GameState => ({
   grams: 0,
+  concentrates: 0,
   totalEarned: 0,
   bestPerSec: 0,
   hazePoints: 0,
@@ -87,6 +90,8 @@ export const createInitialState = (): GameState => ({
   seeds: {},
   cart: [],
   consumables: { water: 0, nutrient: 0, spray: 0, fungicide: 0, beneficials: 0, pgr: 0, coffee: 0 },
+  marketTrendMult: 1,
+  marketTrendName: 'Stabil',
   quests: [],
   activeQuests: [],
   completedQuests: [],
@@ -154,6 +159,14 @@ const ensureConsumables = (state: any): GameState => {
   return next;
 };
 
+const MARKET_TRENDS = [
+  { id: 'indica', name: 'Indica-Hype', mult: 1.2, desc: 'Indica gefragt. +20% Verkaufspreis' },
+  { id: 'sativa', name: 'Sativa-Surge', mult: 1.15, desc: 'Sativa ist gefragt. +15% Preis' },
+  { id: 'organic', name: 'Bio-Boom', mult: 1.1, desc: 'Bio-Käufer zahlen mehr.' },
+  { id: 'glut', name: 'Markt-Glut', mult: 0.85, desc: 'Übersättigung. -15% Preis' },
+  { id: 'stable', name: 'Stabil', mult: 1.0, desc: 'Normale Nachfrage.' }
+];
+
 const ensureProcessing = (state: any): ProcessingState => {
   const normalize = (source?: Partial<ProcessingState>): ProcessingState => {
     const slots = source?.slots || { drying: 2, curing: 2 };
@@ -176,10 +189,11 @@ const ensureProcessing = (state: any): ProcessingState => {
 
 const normalizeQuestProgress = (qp: Partial<QuestProgress>): QuestProgress => {
   const quest = QUESTS.find((q) => q.id === qp.id);
-  const baseTasks = quest?.tasks || [];
+  const baseTasks = quest?.tasks || qp.tasks || [];
   const tasks = baseTasks.map((t, idx) => {
-    const current = Math.max(0, Math.min(t.required, (qp.tasks?.[idx]?.current as number) || 0));
-    return { ...t, current };
+    const amt = typeof (t as any).required === 'number' ? (t as any).required : t.amount;
+    const current = Math.max(0, Math.min(amt, (qp.tasks?.[idx]?.current as number) || 0));
+    return { ...t, amount: amt, current };
   });
   const status: QuestProgress['status'] = qp.status === 'ready' || qp.status === 'claimed' ? qp.status : 'active';
   return { id: qp.id || quest?.id || 'unknown', tasks, status };
@@ -189,6 +203,8 @@ const ensureQuestState = (state: GameState) => {
   state.quests = Array.isArray(state.quests) ? state.quests.map((q) => normalizeQuestProgress(q)) : [];
   state.activeQuests = Array.isArray(state.activeQuests) ? state.activeQuests : [];
   state.completedQuests = Array.isArray(state.completedQuests) ? state.completedQuests : [];
+  state.marketTrendMult = typeof state.marketTrendMult === 'number' ? state.marketTrendMult : 1;
+  state.marketTrendName = state.marketTrendName || 'Stabil';
 };
 
 export const getAllStrains = (state: GameState) => STRAINS.concat(state.customStrains || []);
@@ -221,6 +237,7 @@ export const hydrateState = (loaded?: Partial<GameState>): GameState => {
     draft.cart = draft.cart || [];
     draft.favorites = Array.isArray(draft.favorites) ? draft.favorites : [];
     draft.bulkConserve = !!draft.bulkConserve;
+    draft.concentrates = typeof draft.concentrates === 'number' ? draft.concentrates : 0;
     ensureQuestState(draft as any);
     syncQuests(draft as any);
     draft.applications = Array.isArray(draft.applications) ? draft.applications : [];
@@ -890,7 +907,7 @@ export const applyOfflineProgress = (state: GameState) => {
 
 export const getSalePricePerGram = (state: GameState) => {
   const base = BASE_PRICE_PER_G * (state.marketMult || 1);
-  const mult = itemPriceMultiplier(state);
+  const mult = itemPriceMultiplier(state) * (state.marketTrendMult || 1);
   const avgQ = (state.qualityPool.grams || 0) > 0 ? state.qualityPool.weighted / state.qualityPool.grams : 1;
   const qMult = 1 + clamp(avgQ - 1, -0.6, 2);
   return base * mult * qMult;
@@ -902,6 +919,23 @@ export const sellGrams = (state: GameState, grams: number) => {
   grams = Math.max(0, grams);
   if (grams <= 0 || state.grams < grams) return state;
   const pricePerG = getSalePricePerGram(state);
+  const cashGain = grams * pricePerG;
+  const next = produce(state, (draft) => {
+    draft.grams -= grams;
+    draft.cash += cashGain;
+    draft.totalCashEarned += cashGain;
+    draft.tradesDone = (draft.tradesDone || 0) + 1;
+  });
+  return checkQuestProgress(checkQuestProgress(next, 'sell', { amount: grams }), 'cash', { amount: cashGain });
+};
+
+export const sellToBuyer = (state: GameState, grams: number, buyer: 'street' | 'market' | 'dispensary') => {
+  grams = Math.max(0, grams);
+  if (grams <= 0 || state.grams < grams) return state;
+  let mult = 1;
+  if (buyer === 'street') mult = 0.85;
+  if (buyer === 'dispensary') mult = 1.15;
+  const pricePerG = getSalePricePerGram(state) * mult;
   const cashGain = grams * pricePerG;
   const next = produce(state, (draft) => {
     draft.grams -= grams;
@@ -1081,10 +1115,11 @@ const addXP = (state: GameState, amt: number) => {
       const quest = QUESTS.find((q) => q.id === qp.id);
       if (!quest) return qp;
       const tasks = qp.tasks.map((t) => {
-        if (t.type === 'level' && state.level >= t.required) return { ...t, current: t.required };
-        return t;
+        const target = t.amount ?? (t as any).required;
+        if (t.type === 'level' && (state.level || 1) >= target) return { ...t, current: target };
+        return { ...t, amount: target };
       });
-      const allDone = tasks.every((t) => (t.current || 0) >= t.required);
+      const allDone = tasks.every((t) => (t.current || 0) >= (t.amount ?? (t as any).required));
       const status: QuestProgress['status'] = qp.status === 'claimed' ? 'claimed' : allDone ? 'ready' : qp.status;
       return { ...qp, tasks, status };
     });
@@ -1103,25 +1138,27 @@ const syncQuests = (state: GameState) => {
   const level = state.level || 1;
   for (const quest of QUESTS) {
     const meetsLevel = (quest.requirements?.minLevel || 0) <= level;
+    const prevDone = quest.requirements?.prevQuestId ? (state.completedQuests || []).includes(quest.requirements.prevQuestId) : true;
     const already = state.quests?.some((q) => q.id === quest.id);
     const done = state.completedQuests?.includes(quest.id);
-    if (meetsLevel && !already && !done) {
+    if (meetsLevel && prevDone && !already && !done) {
       const progress: QuestProgress = {
         id: quest.id,
         tasks: quest.tasks.map((t) => {
-          const baseCurrent = t.type === 'level' && level >= t.required ? t.required : 0;
-          return { ...t, current: baseCurrent };
+          const amt = typeof (t as any).required === 'number' ? (t as any).required : t.amount;
+          const baseCurrent = t.type === 'level' && level >= amt ? amt : 0;
+          return { ...t, amount: amt, current: baseCurrent };
         }),
         status: 'active'
       };
-      progress.status = progress.tasks.every((t) => (t.current || 0) >= t.required) ? 'ready' : 'active';
+      progress.status = progress.tasks.every((t) => (t.current || 0) >= (t.amount ?? (t as any).required)) ? 'ready' : 'active';
       state.quests?.push(progress);
     }
   }
   state.quests = (state.quests || []).map((qp) => {
     const quest = QUESTS.find((q) => q.id === qp.id);
     if (!quest) return qp;
-    const allDone = qp.tasks.every((t) => (t.current || 0) >= t.required);
+    const allDone = qp.tasks.every((t) => (t.current || 0) >= (t.amount || (t as any).required));
     return { ...qp, status: qp.status === 'claimed' ? 'claimed' : allDone ? 'ready' : 'active' };
   });
   state.activeQuests = (state.quests || []).filter((q) => q.status !== 'claimed').map((q) => q.id);
@@ -1133,29 +1170,29 @@ const applyQuestRewards = (state: GameState, questId: string) => {
   if (!quest) return;
   ensureConsumables(state);
   for (const reward of quest.rewards) {
-    if (reward.type === 'cash' && reward.value) {
-      state.cash += reward.value;
-      state.totalCashEarned += reward.value;
+    if (reward.cash) {
+      state.cash += reward.cash;
+      state.totalCashEarned += reward.cash;
     }
-    if (reward.type === 'xp' && reward.value) {
-      addXP(state as any, reward.value);
+    if (reward.xp) {
+      addXP(state as any, reward.xp);
     }
-    if (reward.type === 'item' && reward.id) {
-      state.itemsOwned[reward.id] = (state.itemsOwned[reward.id] || 0) + (reward.count || 1);
+    if (reward.item) {
+      state.itemsOwned[reward.item] = (state.itemsOwned[reward.item] || 0) + (reward.count || 1);
     }
-    if (reward.type === 'consumable' && reward.id) {
+    if (reward.consumable) {
       const count = reward.count || 1;
-      if (reward.id === 'coffee_premium') state.consumables.coffee += count;
-      if (reward.id === 'fungicide') state.consumables.fungicide += count;
-      if (reward.id === 'spray') state.consumables.spray += count;
-      if (reward.id === 'nutrient') state.consumables.nutrient += count;
-      if (reward.id === 'beneficials') state.consumables.beneficials += count;
+      if (reward.consumable === 'coffee_premium') state.consumables.coffee += count;
+      if (reward.consumable === 'fungicide') state.consumables.fungicide += count;
+      if (reward.consumable === 'spray') state.consumables.spray += count;
+      if (reward.consumable === 'nutrient') state.consumables.nutrient += count;
+      if (reward.consumable === 'beneficials') state.consumables.beneficials += count;
     }
-    if (reward.type === 'seed' && reward.id) {
-      state.seeds[reward.id] = (state.seeds[reward.id] || 0) + (reward.count || 1);
+    if (reward.seed) {
+      state.seeds[reward.seed] = (state.seeds[reward.seed] || 0) + (reward.count || 1);
     }
-    if (reward.type === 'message' && reward.value) {
-      pushMessage(state, String(reward.value));
+    if (reward.message) {
+      pushMessage(state, String(reward.message));
     }
   }
 };
@@ -1182,14 +1219,16 @@ export const checkQuestProgress = (state: GameState, action: 'harvest' | 'sell' 
         let current = t.current || 0;
         const increment = payload?.amount ?? payload?.value ?? payload?.count ?? 1;
         if (matchesQuestTask(def, action, payload)) {
-          current = Math.min(def.required, current + increment);
+          const targetAmt = def.amount ?? (def as any).required;
+          current = Math.min(targetAmt, current + increment);
         }
-        if (def.type === 'level' && (payload?.level || draft.level) >= def.required) {
-          current = def.required;
+        const targetAmt = def.amount ?? (def as any).required;
+        if (def.type === 'level' && (payload?.level || draft.level) >= targetAmt) {
+          current = targetAmt;
         }
-        return { ...def, current };
+        return { ...def, amount: targetAmt, current };
       });
-      if (qp.tasks.every((t) => (t.current || 0) >= t.required)) {
+      if (qp.tasks.every((t) => (t.current || 0) >= (t.amount ?? (t as any).required))) {
         qp.status = 'ready';
         anyReady = true;
       }
@@ -1351,6 +1390,24 @@ export const collectAllProcessed = (state: GameState) => {
       addXP(draft as any, Math.max(1, Math.floor(batch.grams / 40)));
     }
     p.ready = [];
+  });
+};
+
+export const pressRosin = (state: GameState, batchId: string) => {
+  const proc = ensureProcessing(state);
+  const idx = (proc.ready || []).findIndex((b) => b.id === batchId);
+  if (idx === -1) return state;
+  const batch = proc.ready[idx];
+  if ((batch.quality || 0) >= ROSIN_MIN_QUALITY) return state;
+  return produce(state, (draft) => {
+    const p = ensureProcessing(draft);
+    const i = (p.ready || []).findIndex((b) => b.id === batchId);
+    if (i === -1) return;
+    const b = p.ready.splice(i, 1)[0];
+    const output = Math.max(0, b.grams * ROSIN_YIELD_MULT);
+    draft.concentrates = (draft.concentrates || 0) + output;
+    addXP(draft as any, Math.max(1, Math.floor(output / 5)));
+    pushMessage(draft as any, `Rosin gewonnen: ${fmtNumber(output)}g`, 'success');
   });
 };
 
@@ -1671,11 +1728,11 @@ const spawnMarketEvent = (state: GameState) => {
 const marketDrift = (state: GameState, dt: number) => {
   state.nextMarketShiftIn = Math.max(0, (state.nextMarketShiftIn || 0) - dt);
   if ((state.nextMarketShiftIn || 0) > 0) return;
-  const prev = state.marketMult || 1;
-  const next = clamp(0.8 + Math.random() * 0.4, 0.8, 1.2);
-  state.marketTrend = next > prev ? 'up' : next < prev ? 'down' : 'stable';
-  state.marketMult = next;
-  state.nextMarketShiftIn = 120 + Math.random() * 120;
+  const trend = MARKET_TRENDS[Math.floor(Math.random() * MARKET_TRENDS.length)];
+  state.marketTrendName = trend.name;
+  state.marketTrendMult = trend.mult;
+  state.marketTrend = trend.mult > 1 ? 'up' : trend.mult < 1 ? 'down' : 'stable';
+  state.nextMarketShiftIn = 600; // alle 10 Minuten
 };
 
 const spawnRandomEvent = (state: GameState) => {
@@ -1940,6 +1997,15 @@ export const fireEmployee = (state: GameState, id: string) =>
   produce(state, (draft) => {
     delete draft.employees[id];
   });
+
+export const setEmployeeResting = (state: GameState, id: string, resting: boolean) => {
+  if (!state.employees[id]) return state;
+  return produce(state, (draft) => {
+    if (draft.employees[id]) {
+      draft.employees[id].resting = resting;
+    }
+  });
+};
 
 const employeeActions = (state: GameState, dt: number) => {
   const updated = produce(state, (draft) => {

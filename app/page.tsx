@@ -23,6 +23,7 @@ import { RightPanel } from './components/RightPanel';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { ProcessingTab } from './components/tabs/ProcessingTab';
 import { ToastHost, pushToast } from './components/ui/ToastHost';
+import { FloatingTextLayer } from './components/ui/FloatingTextLayer';
 
 const TABS = [
   { id: 'farm', label: 'Farm', icon: 'fi fi-sr-leaf' },
@@ -120,6 +121,7 @@ export default function Page() {
         <span className="orb"></span>
         <span className="orb"></span>
       </div>
+      <FloatingTextLayer />
       <ToastHost />
       <HeaderHUD state={state} perSec={derived.perSec} onSpeedChange={actions.setSpeed} gameClock={gameClock} />
       <SidebarNav tabs={TABS} active={activeTab} onSelect={setActiveTab} />

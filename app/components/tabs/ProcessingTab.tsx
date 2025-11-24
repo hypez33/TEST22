@@ -27,6 +27,7 @@ export function ProcessingTab({ state, actions }: Props) {
   const curingSlots = proc.slots.curing || 0;
   const dryingFree = Math.max(0, dryingSlots - drying.length);
   const curingFree = Math.max(0, curingSlots - curing.length);
+  const rosinCandidates = ready.filter((r) => (r.quality || 0) < 1);
 
   return (
     <section className="tab processing-tab">
@@ -40,6 +41,7 @@ export function ProcessingTab({ state, actions }: Props) {
           <SummaryPill label="Trocknungsnetze" value={`${drying.length}/${dryingSlots}`} icon="fi fi-sr-wind" />
           <SummaryPill label="Curing-Gläser" value={`${curing.length}/${curingSlots}`} icon="fi fi-sr-flask" />
           <SummaryPill label="Abpackbereit" value={`${ready.length}`} icon="fi fi-sr-check" />
+          <SummaryPill label="Konzentrate" value={`${fmtNumber(state.concentrates || 0)} g`} icon="fi fi-sr-dna" />
           <div className="processing-actions">
             <button className="ghost" type="button" onClick={() => actions.startDrying()} disabled={dryingFree <= 0 || wet.length === 0}>
               Freie Netze füllen ({dryingFree})
@@ -165,6 +167,29 @@ export function ProcessingTab({ state, actions }: Props) {
                       Abpacken
                     </button>
                   </>
+                }
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <h3>Rosin-Presse</h3>
+            <span className="hint">Schlechte Batches in Konzentrate verwandeln</span>
+          </div>
+          <div className="process-list">
+            {rosinCandidates.length === 0 && <div className="placeholder">Keine schwachen Batches zum Pressen.</div>}
+            {rosinCandidates.map((b) => (
+              <ProcessCard
+                key={`rosin-${b.id}`}
+                batch={b}
+                stageLabel="Pressbar"
+                meta={`Qualität x${b.quality.toFixed(2)}`}
+                actions={
+                  <button className="accent" type="button" onClick={() => actions.pressRosin(b.id)}>
+                    Pressen
+                  </button>
                 }
               />
             ))}

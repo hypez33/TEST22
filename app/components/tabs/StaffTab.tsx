@@ -52,6 +52,9 @@ export function StaffTab({ state, actions }: Props) {
                         <button className="accent" onClick={() => actions.upgradeEmployee(emp.id)} disabled={state.grams < upgradeCost}>
                           Upgrade ({fmtNumber(upgradeCost)}g)
                         </button>
+                        <button className="secondary" onClick={() => actions.setEmployeeResting(emp.id, !resting)}>
+                          {resting ? 'Arbeiten lassen' : 'Pause'}
+                        </button>
                         <button className="ghost" onClick={() => actions.fireEmployee(emp.id)}>
                           Kündigen
                         </button>

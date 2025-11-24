@@ -246,13 +246,14 @@ main{ padding: 40px 14px; max-width: 1100px; margin: 0 auto }
 
 .page-shell{
   display:grid;
-  grid-template-columns: var(--sidebar-w) 1fr 320px;
   grid-template-areas:
-    "header header header"
+    "sidebar header right"
     "sidebar main right";
+  grid-template-columns: auto 1fr 320px;
+  grid-template-rows: auto 1fr;
+  height:100vh;
   column-gap:16px;
-  padding: 12px 16px 32px;
-  min-height:100vh;
+  padding: 12px 16px 24px;
   align-items:start;
 }
 
@@ -261,7 +262,6 @@ main{ padding: 40px 14px; max-width: 1100px; margin: 0 auto }
 main{ grid-area: main; padding-top: 20px; }
 
 .sidebar{ grid-area: sidebar; }
-
 .right-panel{ grid-area: right; }
 
 
@@ -2886,6 +2886,13 @@ button:active{ transform: translateY(0) scale(.98) !important; box-shadow: inset
 .floating-text.loss{ color:#ff8a9c; }
 .floating-text.info{ color:#b5ddff; }
 
+.floating-layer{
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:25;
+}
+
 .toast-container{
   position:fixed;
   top:12px;
@@ -2912,6 +2919,9 @@ button:active{ transform: translateY(0) scale(.98) !important; box-shadow: inset
 .toast-msg{ font-size:12px; color: var(--muted); margin-top:2px; }
 
 @keyframes toastIn{ from{ transform: translateY(-10px); opacity:0; } to{ transform: translateY(0); opacity:1; } }
+
+.tooltip-wrapper{ position:relative; display:inline-block; }
+.tooltip{ position:absolute; bottom: calc(100% + 8px); left:50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color:#fff; padding:8px 10px; border-radius:8px; font-size:12px; white-space:nowrap; box-shadow:0 6px 18px rgba(0,0,0,.35); z-index:30; }
 
 .processing-summary{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
 .summary-pill{ background: linear-gradient(180deg, var(--panel-soft), var(--panel)); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:10px 12px; min-width:150px; box-shadow: var(--shadow); }
@@ -3066,7 +3076,7 @@ button:active{ transform: translateY(0) scale(.98) !important; box-shadow: inset
 
 /* Right panel */
 
-.right-panel{ position:sticky; top: calc(var(--header-h) + 10px); right:0; width:280px; height:fit-content; max-height: calc(100vh - var(--header-h) - 20px); background: linear-gradient(180deg, rgba(12,18,17,0.55), rgba(12,18,17,0.75)), var(--panel); border-left:1px solid rgba(255,255,255,0.12); overflow:auto; z-index:6; box-shadow: -4px 0 22px rgba(0,0,0,.35); transition: right 0.3s ease; backdrop-filter: blur(8px); border-radius: 14px 0 0 14px }
+.right-panel{ position:sticky; top: calc(var(--header-h) + 10px); right:0; width:280px; height:fit-content; max-height: calc(100vh - var(--header-h) - 20px); background: linear-gradient(180deg, rgba(12,18,17,0.55), rgba(12,18,17,0.75)), var(--panel); border-left:1px solid rgba(255,255,255,0.12); overflow:auto; z-index:6; box-shadow: -4px 0 22px rgba(0,0,0,.35); transition: right 0.3s ease; backdrop-filter: blur(8px); border-radius: 14px 0 0 14px; margin-left: auto; }
 
 
 

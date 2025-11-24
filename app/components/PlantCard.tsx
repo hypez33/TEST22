@@ -6,7 +6,7 @@ import { NUTRIENT_MAX, WATER_MAX } from '@/lib/game/data';
 import { fmtNumber, formatTimer } from '@/lib/game/utils';
 import { GameState, Plant, Strain } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
-import { spawnFloatingText } from './ui/floatingText';
+import { emitFloatingText } from './ui/FloatingTextLayer';
 import React from 'react';
 
 type Props = {
@@ -38,7 +38,7 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
   const phaseImage = `/assets/phase${phase}.png`;
 
   const showFloat = (text: string, e: React.MouseEvent, tone: 'gain' | 'loss' | 'info' = 'gain') => {
-    spawnFloatingText(text, { clientX: e.clientX, clientY: e.clientY }, tone);
+    emitFloatingText(text, e.clientX, e.clientY, tone);
   };
 
   const handleHarvest = (e: React.MouseEvent) => {

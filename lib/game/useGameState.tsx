@@ -29,6 +29,7 @@ import {
   hireEmployee,
   upgradeEmployee,
   fireEmployee,
+  setEmployeeResting,
   performBreeding,
   setBreedingParent,
   buyContract,
@@ -41,6 +42,7 @@ import {
   upgradePlant,
   takeJob,
   sellGrams,
+  sellToBuyer,
   acceptOffer,
   deliverApotheke,
   setDifficulty,
@@ -62,9 +64,11 @@ import {
   startDrying,
   startCuring,
   collectProcessed,
-  collectAllProcessed
+  collectAllProcessed,
+  pressRosin
 } from './engine';
 import { GameState } from './types';
+import { gameStateSchema } from './saveSchema';
 
 export type GameActions = ReturnType<typeof buildActions>;
 
@@ -111,13 +115,16 @@ const buildActions = (setState: React.Dispatch<React.SetStateAction<GameState>>)
   acceptOffer: (id: number | string) => setState((s) => acceptOffer(s, id)),
   deliverApotheke: (id: number | string) => setState((s) => deliverApotheke(s, id)),
   deliverOrder: (id: number | string) => setState((s) => deliverOrder(s, id)),
+  sellToBuyer: (grams: number, buyer: 'street' | 'market' | 'dispensary') => setState((s) => sellToBuyer(s, grams, buyer)),
   hireEmployee: (id: string) => setState((s) => hireEmployee(s, id)),
   upgradeEmployee: (id: string) => setState((s) => upgradeEmployee(s, id)),
   fireEmployee: (id: string) => setState((s) => fireEmployee(s, id)),
+  setEmployeeResting: (id: string, resting: boolean) => setState((s) => setEmployeeResting(s, id, resting)),
   startDrying: (batchId?: string) => setState((s) => startDrying(s, batchId)),
   startCuring: (batchId: string) => setState((s) => startCuring(s, batchId)),
   collectProcessed: (batchId: string) => setState((s) => collectProcessed(s, batchId)),
   collectAllProcessed: () => setState((s) => collectAllProcessed(s)),
+  pressRosin: (batchId: string) => setState((s) => pressRosin(s, batchId)),
   setBreedingParent: (parent: 1 | 2, strain: string | null) => setState((s) => setBreedingParent(s, parent, strain)),
   performBreeding: () => setState((s) => performBreeding(s)),
   buyContract: (id: string) => setState((s) => buyContract(s, id)),
@@ -133,7 +140,8 @@ export function useGameState() {
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
-        setState((s) => applyOfflineProgress(hydrateState(parsed)));
+        const validated = gameStateSchema.parse(parsed);
+        setState((s) => applyOfflineProgress(hydrateState(validated)));
       } catch (err) {
         console.warn('Konnte Spielstand nicht laden', err);
         setState(createInitialState());

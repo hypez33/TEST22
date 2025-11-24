@@ -244,25 +244,30 @@ export interface GameMessage {
 export interface QuestTask {
   type: 'harvest' | 'sell' | 'cash' | 'level';
   target?: string;
-  required: number;
+  amount: number;
   current?: number;
-}
-
-export interface QuestReward {
-  type: 'cash' | 'item' | 'consumable' | 'seed' | 'xp' | 'message';
-  value?: number;
-  id?: string;
-  count?: number;
 }
 
 export interface QuestRequirement {
   minLevel?: number;
+  prevQuestId?: string;
+}
+
+export interface QuestReward {
+  xp?: number;
+  cash?: number;
+  item?: string;
+  seed?: string;
+  consumable?: string;
+  count?: number;
+  message?: string;
 }
 
 export interface Quest {
   id: string;
   title: string;
   description: string;
+  icon?: string;
   requirements?: QuestRequirement;
   tasks: QuestTask[];
   rewards: QuestReward[];
@@ -295,6 +300,7 @@ export interface CaseStats {
 
 export interface GameState {
   grams: number;
+  concentrates?: number;
   totalEarned: number;
   bestPerSec: number;
   hazePoints: number;
@@ -330,6 +336,8 @@ export interface GameState {
   marketMult: number;
   marketTrend?: 'up' | 'down' | 'stable';
   nextMarketShiftIn?: number;
+  marketTrendMult?: number;
+  marketTrendName?: string;
   marketTimer: number;
   marketEventName: string;
   research: Record<string, boolean>;

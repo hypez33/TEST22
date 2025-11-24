@@ -90,17 +90,17 @@ function QuestPanel({ state, actions }: { state: GameState; actions: GameActions
             <div className="label">
               <div>
                 <div>
-                  <strong>{def.title}</strong>
+                  <strong>{def.icon ? `${def.icon} ` : ''}{def.title}</strong>
                 </div>
                 <div className="quest-muted">{def.description}</div>
                 <div className="quest-tasks">
                   {qp.tasks.map((t, idx) => {
-                    const pct = Math.min(100, Math.round(((t.current || 0) / t.required) * 100));
+                    const pct = Math.min(100, Math.round(((t.current || 0) / (t.amount || 1)) * 100));
                     return (
                       <div key={idx} className="quest-task">
                         <div className="quest-task-head">
                           <span>{renderTaskLabel(t)}</span>
-                          <span className="quest-muted">{t.current || 0}/{t.required}</span>
+                          <span className="quest-muted">{t.current || 0}/{t.amount}</span>
                         </div>
                         <div className="progress">
                           <div className="progress-bar" style={{ width: `${pct}%` }} />
@@ -146,18 +146,19 @@ function QuestPanel({ state, actions }: { state: GameState; actions: GameActions
 }
 
 function renderTaskLabel(t: any) {
-  if (t.type === 'harvest') return t.target ? `Ernte ${t.required}x ${t.target}` : `Ernte ${t.required}x`;
-  if (t.type === 'sell') return `Verkaufe ${fmtNumber(t.required)} g`;
-  if (t.type === 'cash') return `Verdiene ${fmtNumber(t.required)} $`;
-  if (t.type === 'level') return `Erreiche Level ${t.required}`;
+  if (t.type === 'harvest') return t.target ? `Ernte ${t.amount}x ${t.target}` : `Ernte ${t.amount}x`;
+  if (t.type === 'sell') return `Verkaufe ${fmtNumber(t.amount)} g`;
+  if (t.type === 'cash') return `Verdiene ${fmtNumber(t.amount)} $`;
+  if (t.type === 'level') return `Erreiche Level ${t.amount}`;
   return 'Aufgabe';
 }
 
 function renderReward(r: any) {
-  if (r.type === 'cash') return `${fmtNumber(r.value || 0)} $`;
-  if (r.type === 'xp') return `${fmtNumber(r.value || 0)} XP`;
-  if (r.type === 'seed') return `${r.count || 1}x Samen ${r.id}`;
-  if (r.type === 'item') return `${r.count || 1}x Item ${r.id}`;
-  if (r.type === 'consumable') return `${r.count || 1}x ${r.id}`;
-  return r.type;
+  if (r.cash) return `${fmtNumber(r.cash)} $`;
+  if (r.xp) return `${fmtNumber(r.xp)} XP`;
+  if (r.seed) return `${r.count || 1}x Samen ${r.seed}`;
+  if (r.item) return `${r.count || 1}x Item ${r.item}`;
+  if (r.consumable) return `${r.count || 1}x ${r.consumable}`;
+  if (r.message) return String(r.message);
+  return 'Belohnung';
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { GameState } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
 import { getSalePricePerGram, getStrain } from '@/lib/game/engine';
@@ -8,7 +9,9 @@ import { fmtNumber } from '@/lib/game/utils';
 type Props = { state: GameState; actions: GameActions };
 
 export function MarketTab({ state, actions }: Props) {
+  const [buyer, setBuyer] = useState<'market' | 'street' | 'dispensary'>('market');
   const pricePerG = getSalePricePerGram(state);
+  const buyerMult = buyer === 'street' ? 0.85 : buyer === 'dispensary' ? 1.15 : 1;
   const sellMax = Math.max(0, state.grams * 0.5);
   const offers = state.offers || [];
   const apothekenOffers = state.apothekenOffers || [];
@@ -25,20 +28,31 @@ export function MarketTab({ state, actions }: Props) {
         </div>
         <div className="market">
           <div className="market-row">
-            <div>Effektiver Preis: {fmtNumber(pricePerG)}/g {trendIcon}</div>
+            <div>Trend: {state.marketTrendName || 'Stabil'} {trendIcon}</div>
+            <div>Effektiver Preis ({buyer}): {fmtNumber(pricePerG * buyerMult)}/g</div>
             <div>Qualitätspool: {fmtNumber(state.qualityPool.grams || 0)} g</div>
             <div>Cash: {fmtNumber(state.cash)}</div>
             <div>Neue Anfrage in: {Math.max(0, Math.round(state.nextOfferIn || 0))}s</div>
             <div>NPC-Auftrag in: {Math.max(0, Math.round(state.nextOrderIn || 0))}s</div>
           </div>
+          <div className="market-row">
+            <label>
+              Käufergruppe:{' '}
+              <select value={buyer} onChange={(e) => setBuyer(e.target.value as any)}>
+                <option value="market">Standard</option>
+                <option value="street">Straßenverkauf (schnell, -15%)</option>
+                <option value="dispensary">Dispensary (+15%)</option>
+              </select>
+            </label>
+          </div>
           <div className="market-actions">
-            <button className="secondary" onClick={() => actions.sell(10)} disabled={state.grams < 10}>
+            <button className="secondary" onClick={() => actions.sellToBuyer(10, buyer)} disabled={state.grams < 10}>
               10 g verkaufen
             </button>
-            <button className="secondary" onClick={() => actions.sell(100)} disabled={state.grams < 100}>
+            <button className="secondary" onClick={() => actions.sellToBuyer(100, buyer)} disabled={state.grams < 100}>
               100 g verkaufen
             </button>
-            <button className="accent" onClick={() => actions.sell(sellMax)} disabled={state.grams <= 0}>
+            <button className="accent" onClick={() => actions.sellToBuyer(sellMax, buyer)} disabled={state.grams <= 0}>
               50% verkaufen
             </button>
           </div>

@@ -99,10 +99,12 @@ export function InventoryTab({ state, actions }: Props) {
         <div className="inventory-list">
           {filtered.length === 0 && <div className="placeholder">Noch nichts gesammelt.</div>}
           {filtered.map((row) => (
-            <div key={`${row.kind}-${row.id}`} className="inventory-item" title={row.desc || row.name}>
-              <div className="inventory-name">
-                {row.name} <span className="pill muted">{row.kind}</span>
-              </div>
+            <div key={`${row.kind}-${row.id}`} className="inventory-item">
+              <Tooltip content={row.desc || row.name}>
+                <div className="inventory-name">
+                  {row.name} <span className="pill muted">{row.kind}</span>
+                </div>
+              </Tooltip>
               <div className="inventory-desc">{row.desc}</div>
               <div className="inventory-meta">
                 <span>Menge: {row.qty}</span>
