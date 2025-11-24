@@ -13,6 +13,8 @@ export function MarketTab({ state, actions }: Props) {
   const offers = state.offers || [];
   const apothekenOffers = state.apothekenOffers || [];
   const orders = state.orders || [];
+  const trend = state.marketTrend || 'stable';
+  const trendIcon = trend === 'up' ? '▲' : trend === 'down' ? '▼' : '•';
 
   return (
     <section id="tab-market" className="tab">
@@ -23,7 +25,7 @@ export function MarketTab({ state, actions }: Props) {
         </div>
         <div className="market">
           <div className="market-row">
-            <div>Effektiver Preis: {fmtNumber(pricePerG)}/g</div>
+            <div>Effektiver Preis: {fmtNumber(pricePerG)}/g {trendIcon}</div>
             <div>Qualitätspool: {fmtNumber(state.qualityPool.grams || 0)} g</div>
             <div>Cash: {fmtNumber(state.cash)}</div>
             <div>Neue Anfrage in: {Math.max(0, Math.round(state.nextOfferIn || 0))}s</div>

@@ -5,6 +5,8 @@ import { NUTRIENT_MAX, WATER_MAX } from '@/lib/game/data';
 import { fmtNumber, formatTimer } from '@/lib/game/utils';
 import { GameState, Plant, Strain } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
+import { SpriteIcon } from './ui/SpriteIcon';
+import { SPRITES } from '@/lib/spriteConfig';
 
 type Props = {
   plant: Plant;
@@ -21,12 +23,21 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
   const statuses = statusForPlant(state, plant);
   const yieldEstimate = harvestYieldFor(state, plant) * qualityMultiplier(state, plant);
   const ready = plant.growProg >= 1;
+  const stageSprite = (() => {
+    const gp = plant.growProg || 0;
+    if (gp < 0.2) return SPRITES.PLANTS.SEED;
+    if (gp < 0.45) return SPRITES.PLANTS.SPROUT;
+    if (gp < 0.8) return SPRITES.PLANTS.VEG;
+    return SPRITES.PLANTS.FLOWER_PURPLE;
+  })();
 
   return (
     <div className={`plant-card ${ready ? 'plant-card-ready' : ''}`} data-slot={plant.slot}>
       <div className="plant-header">
         <div className="plant-left">
-          <div className="plant-icon">{strain.tag || '🌿'}</div>
+          <div className="plant-icon">
+            <SpriteIcon gridX={stageSprite.gridX} gridY={stageSprite.gridY} size={48} />
+          </div>
           <div>
             <div className="plant-name">{strain.name}</div>
             <div className="plant-level">Level {plant.level}</div>

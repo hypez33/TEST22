@@ -82,6 +82,8 @@ export const createInitialState = (): GameState => ({
   consumables: { water: 0, nutrient: 0, spray: 0, fungicide: 0, beneficials: 0, pgr: 0 },
   difficulty: 'normal',
   marketMult: 1,
+  marketTrend: 'stable',
+  nextMarketShiftIn: 90,
   marketTimer: 0,
   marketEventName: '',
   apothekenOffers: [],
@@ -175,6 +177,8 @@ export const hydrateState = (loaded?: Partial<GameState>): GameState => {
     draft.caseStats = { ...defaultCaseStats(), ...(loaded?.caseStats || {}) };
     draft.inventoryFilter = draft.inventoryFilter || 'all';
     draft.inventorySort = draft.inventorySort || 'name';
+    draft.marketTrend = draft.marketTrend || 'stable';
+    draft.nextMarketShiftIn = typeof draft.nextMarketShiftIn === 'number' ? draft.nextMarketShiftIn : 90;
     draft.nextOrderIn = typeof draft.nextOrderIn === 'number' ? draft.nextOrderIn : 60;
     draft.nextGameEventIn = typeof draft.nextGameEventIn === 'number' ? draft.nextGameEventIn : 300;
     draft.activeEvents = draft.activeEvents || [];
@@ -786,6 +790,7 @@ export const tickState = (state: GameState, realSeconds: number): GameState => {
       const bonus = Math.floor(Math.random() * 50) + 10;
       draft.cash += bonus;
     }
+    marketDrift(draft as any, worldDt);
     if (draft.marketTimer > 0) draft.marketTimer = Math.max(0, draft.marketTimer - worldDt);
     if (draft.nextMarketEventIn > 0) draft.nextMarketEventIn = Math.max(0, draft.nextMarketEventIn - worldDt);
     if (draft.nextMarketEventIn === 0 && draft.marketTimer === 0) spawnMarketEvent(draft as any);
@@ -995,15 +1000,17 @@ export const harvestPlant = (state: GameState, slotIndex: number) => {
   const plant = state.plants[idx];
   if (plant.growProg < 1) return state;
   if ((state.itemsOwned['shears'] || 0) <= 0) return state;
-  const gain = harvestYieldFor(state, plant) * qualityMultiplier(state, plant);
+  const qm = qualityMultiplier(state, plant);
+  const gain = harvestYieldFor(state, plant) * qm;
   return produce(state, (draft) => {
     draft.grams += gain;
     draft.totalEarned += gain;
-    const q = qualityMultiplier(draft as any, plant);
+    const q = qm;
     draft.qualityPool.grams = (draft.qualityPool.grams || 0) + gain;
     draft.qualityPool.weighted = (draft.qualityPool.weighted || 0) + gain * q;
     draft.plants = draft.plants.filter((p) => p.slot !== slotIndex);
-    addXP(draft as any, Math.max(1, Math.floor(gain / 50)));
+    const tierBonus = q >= 1.3 ? 1.5 : q >= 1.1 ? 1.2 : 1;
+    addXP(draft as any, Math.max(1, Math.floor((gain / 50) * tierBonus)));
   });
 };
 
@@ -1299,6 +1306,16 @@ const spawnMarketEvent = (state: GameState) => {
     state.marketTimer = 30;
   }
   state.nextMarketEventIn = 90 + Math.random() * 60;
+};
+
+const marketDrift = (state: GameState, dt: number) => {
+  state.nextMarketShiftIn = Math.max(0, (state.nextMarketShiftIn || 0) - dt);
+  if ((state.nextMarketShiftIn || 0) > 0) return;
+  const prev = state.marketMult || 1;
+  const next = clamp(0.8 + Math.random() * 0.4, 0.8, 1.2);
+  state.marketTrend = next > prev ? 'up' : next < prev ? 'down' : 'stable';
+  state.marketMult = next;
+  state.nextMarketShiftIn = 120 + Math.random() * 120;
 };
 
 const spawnRandomEvent = (state: GameState) => {

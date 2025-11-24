@@ -252,6 +252,8 @@ export interface GameState {
   consumables: Consumables;
   difficulty: Difficulty;
   marketMult: number;
+  marketTrend?: 'up' | 'down' | 'stable';
+  nextMarketShiftIn?: number;
   marketTimer: number;
   marketEventName: string;
   research: Record<string, boolean>;
