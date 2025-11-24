@@ -241,6 +241,39 @@ export interface GameMessage {
   createdAt?: number;
 }
 
+export interface QuestTask {
+  type: 'harvest' | 'sell' | 'cash' | 'level';
+  target?: string;
+  required: number;
+  current?: number;
+}
+
+export interface QuestReward {
+  type: 'cash' | 'item' | 'consumable' | 'seed' | 'xp' | 'message';
+  value?: number;
+  id?: string;
+  count?: number;
+}
+
+export interface QuestRequirement {
+  minLevel?: number;
+}
+
+export interface Quest {
+  id: string;
+  title: string;
+  description: string;
+  requirements?: QuestRequirement;
+  tasks: QuestTask[];
+  rewards: QuestReward[];
+}
+
+export interface QuestProgress {
+  id: string;
+  tasks: QuestTask[];
+  status: 'active' | 'ready' | 'claimed';
+}
+
 export interface CartEntry {
   id: string;
   qty: number;
@@ -328,6 +361,9 @@ export interface GameState {
   inventoryFilter: string;
   inventorySort: string;
   questStep?: number;
+  quests?: QuestProgress[];
+  activeQuests: string[];
+  completedQuests: string[];
   breedingSlots?: { parent1: string | null; parent2: string | null };
   favorites?: string[];
   bulkConserve?: boolean;

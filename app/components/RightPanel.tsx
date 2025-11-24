@@ -1,9 +1,10 @@
 'use client';
 
-import { questConditions } from '@/lib/game/engine';
 import { GameState } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
 import { useMemo, useState } from 'react';
+import { QUESTS } from '@/lib/game/quests';
+import { fmtNumber } from '@/lib/game/utils';
 
 type Props = { state: GameState; actions: GameActions };
 
@@ -33,7 +34,7 @@ export function RightPanel({ state, actions }: Props) {
           {tab === 'quests' && (
             <div className="panel-section active">
               <h3>Quests</h3>
-              <QuestPanel state={state} />
+              <QuestPanel state={state} actions={actions} />
             </div>
           )}
           {tab === 'news' && (
@@ -68,58 +69,95 @@ export function RightPanel({ state, actions }: Props) {
   );
 }
 
-function QuestPanel({ state }: { state: GameState }) {
-  const cond = questConditions(state);
-  const step = state.questStep || 0;
+function QuestPanel({ state, actions }: { state: GameState; actions: GameActions }) {
+  const progress = state.quests || [];
+  const completed = new Set(state.completedQuests || []);
+  const active = progress.filter((q) => q.status !== 'claimed');
+  const upcoming = QUESTS.filter((q) => !progress.some((p) => p.id === q.id) && !completed.has(q.id));
+
+  if (active.length === 0 && upcoming.length === 0) {
+    return <div className="placeholder">Keine aktiven Quests. Spiele weiter, um neue Quests zu erhalten.</div>;
+  }
+
   return (
     <div className="quest-list">
-      {step <= 0 && (
-        <div className="quest-step">
-          <div className="label">
-            <div>
+      {active.map((qp) => {
+        const def = QUESTS.find((q) => q.id === qp.id);
+        if (!def) return null;
+        const ready = qp.status === 'ready';
+        return (
+          <div key={qp.id} className={`quest-step ${ready ? 'ready' : ''}`}>
+            <div className="label">
               <div>
-                <strong>Quest 1:</strong> Finde einen Job
+                <div>
+                  <strong>{def.title}</strong>
+                </div>
+                <div className="quest-muted">{def.description}</div>
+                <div className="quest-tasks">
+                  {qp.tasks.map((t, idx) => {
+                    const pct = Math.min(100, Math.round(((t.current || 0) / t.required) * 100));
+                    return (
+                      <div key={idx} className="quest-task">
+                        <div className="quest-task-head">
+                          <span>{renderTaskLabel(t)}</span>
+                          <span className="quest-muted">{t.current || 0}/{t.required}</span>
+                        </div>
+                        <div className="progress">
+                          <div className="progress-bar" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="quest-rewards">
+                  {def.rewards.map((r, i) => (
+                    <span key={i} className="pill">
+                      {renderReward(r)}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="quest-muted">Wechsle zum Tab Jobs und bewirb dich.</div>
+              {ready && (
+                <button className="accent" onClick={() => actions.claimQuest(qp.id)}>
+                  Belohnung abholen
+                </button>
+              )}
             </div>
           </div>
-        </div>
-      )}
-      {step === 1 && (
-        <div className="quest-step">
-          <div className="label">
-            <div>
-              <div>
-                <strong>Quest 2:</strong> Shop-Grundausstattung kaufen
+        );
+      })}
+      {upcoming.length > 0 && (
+        <div className="quest-upcoming">
+          <div className="quest-muted">Demnächst</div>
+          {upcoming.map((q) => (
+            <div key={q.id} className="quest-step small">
+              <div className="label">
+                <div>
+                  <strong>{q.title}</strong>
+                  <div className="quest-muted">Freischaltung: Lvl {q.requirements?.minLevel || 1}</div>
+                </div>
               </div>
-              <div className="quest-muted">Samen, Schere, Dünger, Fungizid, Spray</div>
             </div>
-          </div>
+          ))}
         </div>
       )}
-      {step === 2 && (
-        <div className="quest-step">
-          <div className="label">
-            <div>
-              <div>
-                <strong>Quest 3:</strong> Pflanze setzen & Zeit starten
-              </div>
-              <div className="quest-muted">Setze einen Samen auf der Farm und starte die Zeit.</div>
-            </div>
-          </div>
-        </div>
-      )}
-      {step >= 3 && (
-        <div className="quest-step">
-          <div className="label">
-            <div>
-              <strong>Starter-Quests erledigt</strong>
-            </div>
-            <div className="quest-muted">Viel Erfolg mit deiner Farm!</div>
-          </div>
-        </div>
-      )}
-      <div className="quest-meta">Status: {JSON.stringify(cond)}</div>
     </div>
   );
+}
+
+function renderTaskLabel(t: any) {
+  if (t.type === 'harvest') return t.target ? `Ernte ${t.required}x ${t.target}` : `Ernte ${t.required}x`;
+  if (t.type === 'sell') return `Verkaufe ${fmtNumber(t.required)} g`;
+  if (t.type === 'cash') return `Verdiene ${fmtNumber(t.required)} $`;
+  if (t.type === 'level') return `Erreiche Level ${t.required}`;
+  return 'Aufgabe';
+}
+
+function renderReward(r: any) {
+  if (r.type === 'cash') return `${fmtNumber(r.value || 0)} $`;
+  if (r.type === 'xp') return `${fmtNumber(r.value || 0)} XP`;
+  if (r.type === 'seed') return `${r.count || 1}x Samen ${r.id}`;
+  if (r.type === 'item') return `${r.count || 1}x Item ${r.id}`;
+  if (r.type === 'consumable') return `${r.count || 1}x ${r.id}`;
+  return r.type;
 }

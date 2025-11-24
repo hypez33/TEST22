@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { HeaderHUD } from './components/HeaderHUD';
 import { SidebarNav } from './components/SidebarNav';
 import { FarmTab } from './components/tabs/FarmTab';
@@ -22,6 +22,7 @@ import { formatGameClock } from '@/lib/game/engine';
 import { RightPanel } from './components/RightPanel';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { ProcessingTab } from './components/tabs/ProcessingTab';
+import { ToastHost, pushToast } from './components/ui/ToastHost';
 
 const TABS = [
   { id: 'farm', label: 'Farm', icon: 'fi fi-sr-leaf' },
@@ -45,8 +46,29 @@ const TABS = [
 export default function Page() {
   const { state, actions, derived, ready } = useGameState();
   const [activeTab, setActiveTab] = useState('farm');
+  const prevLevel = useRef(state.level);
+  const prevReadyQuests = useRef<string[]>([]);
+  const prevCompleted = useRef<string[]>([]);
 
   const gameClock = useMemo(() => formatGameClock(state), [state]);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (state.level > (prevLevel.current || 0)) {
+      pushToast({ title: 'Level Up!', message: `Du bist jetzt Level ${state.level}`, type: 'success' });
+      prevLevel.current = state.level;
+    }
+    const readyQuests = (state.quests || []).filter((q) => q.status === 'ready').map((q) => q.id);
+    readyQuests
+      .filter((id) => !prevReadyQuests.current.includes(id))
+      .forEach((id) => pushToast({ title: 'Quest bereit', message: `Quest ${id} kann abgeholt werden`, type: 'info' }));
+    prevReadyQuests.current = readyQuests;
+    const completed = (state.completedQuests || []);
+    completed
+      .filter((id) => !prevCompleted.current.includes(id))
+      .forEach((id) => pushToast({ title: 'Quest abgeschlossen', message: id, type: 'success' }));
+    prevCompleted.current = completed;
+  }, [state.level, state.quests, ready]);
 
   const renderTab = (id: string) => {
     switch (id) {
@@ -98,6 +120,7 @@ export default function Page() {
         <span className="orb"></span>
         <span className="orb"></span>
       </div>
+      <ToastHost />
       <HeaderHUD state={state} perSec={derived.perSec} onSpeedChange={actions.setSpeed} gameClock={gameClock} />
       <SidebarNav tabs={TABS} active={activeTab} onSelect={setActiveTab} />
 

@@ -40,7 +40,8 @@ import {
   WATER_START,
   buildCaseConfigs
 } from './data';
-import { CaseStats, CartEntry, GameState, Plant, ProcessedBatch, ProcessingState, Rarity, Strain } from './types';
+import { CaseStats, CartEntry, GameState, Plant, ProcessedBatch, ProcessingState, QuestProgress, Rarity, Strain } from './types';
+import { QUESTS } from './quests';
 import { clamp, defaultCaseStats, fmtNumber } from './utils';
 
 export const SPEED_OPTIONS = [0, 0.5, 1, 2, 7];
@@ -85,7 +86,10 @@ export const createInitialState = (): GameState => ({
   itemsOwned: {},
   seeds: {},
   cart: [],
-  consumables: { water: 0, nutrient: 0, spray: 0, fungicide: 0, beneficials: 0, pgr: 0 },
+  consumables: { water: 0, nutrient: 0, spray: 0, fungicide: 0, beneficials: 0, pgr: 0, coffee: 0 },
+  quests: [],
+  activeQuests: [],
+  completedQuests: [],
   processing: { wet: [], drying: [], curing: [], ready: [], slots: { drying: 2, curing: 2 } },
   difficulty: 'normal',
   marketMult: 1,
@@ -170,6 +174,23 @@ const ensureProcessing = (state: any): ProcessingState => {
   return next.processing;
 };
 
+const normalizeQuestProgress = (qp: Partial<QuestProgress>): QuestProgress => {
+  const quest = QUESTS.find((q) => q.id === qp.id);
+  const baseTasks = quest?.tasks || [];
+  const tasks = baseTasks.map((t, idx) => {
+    const current = Math.max(0, Math.min(t.required, (qp.tasks?.[idx]?.current as number) || 0));
+    return { ...t, current };
+  });
+  const status: QuestProgress['status'] = qp.status === 'ready' || qp.status === 'claimed' ? qp.status : 'active';
+  return { id: qp.id || quest?.id || 'unknown', tasks, status };
+};
+
+const ensureQuestState = (state: GameState) => {
+  state.quests = Array.isArray(state.quests) ? state.quests.map((q) => normalizeQuestProgress(q)) : [];
+  state.activeQuests = Array.isArray(state.activeQuests) ? state.activeQuests : [];
+  state.completedQuests = Array.isArray(state.completedQuests) ? state.completedQuests : [];
+};
+
 export const getAllStrains = (state: GameState) => STRAINS.concat(state.customStrains || []);
 
 export const getStrain = (state: GameState, id: string): Strain => {
@@ -200,6 +221,8 @@ export const hydrateState = (loaded?: Partial<GameState>): GameState => {
     draft.cart = draft.cart || [];
     draft.favorites = Array.isArray(draft.favorites) ? draft.favorites : [];
     draft.bulkConserve = !!draft.bulkConserve;
+    ensureQuestState(draft as any);
+    syncQuests(draft as any);
     draft.applications = Array.isArray(draft.applications) ? draft.applications : [];
     draft.applications = draft.applications.map((a: any) => ({
       ...a,
@@ -797,6 +820,7 @@ export const tickState = (state: GameState, realSeconds: number): GameState => {
   let next = produce(state, (draft) => {
     draft.playtimeSec += Math.max(0, realSeconds);
     draft.lastTime = Date.now();
+    syncQuests(draft as any);
     if (worldDt <= 0) return;
     draft.plants.forEach((p) => advancePlant(draft as any, p, worldDt));
     advanceGameTime(draft as any, worldDt);
@@ -879,12 +903,13 @@ export const sellGrams = (state: GameState, grams: number) => {
   if (grams <= 0 || state.grams < grams) return state;
   const pricePerG = getSalePricePerGram(state);
   const cashGain = grams * pricePerG;
-  return produce(state, (draft) => {
+  const next = produce(state, (draft) => {
     draft.grams -= grams;
     draft.cash += cashGain;
     draft.totalCashEarned += cashGain;
     draft.tradesDone = (draft.tradesDone || 0) + 1;
   });
+  return checkQuestProgress(checkQuestProgress(next, 'sell', { amount: grams }), 'cash', { amount: cashGain });
 };
 
 export const acceptOffer = (state: GameState, id: number | string) => {
@@ -897,10 +922,12 @@ export const acceptOffer = (state: GameState, id: number | string) => {
     });
   }
   if (state.grams < offer.grams) return state;
-  return produce(state, (draft) => {
+  let totalCash = 0;
+  const next = produce(state, (draft) => {
     const avgQ = (draft.qualityPool.grams || 0) > 0 ? draft.qualityPool.weighted / draft.qualityPool.grams : 1;
     const qMult = saleQualityMultiplier(avgQ);
     const total = offer.grams * offer.pricePerG * qMult;
+    totalCash = total;
     draft.grams -= offer.grams;
     const usedWeighted = Math.min(draft.qualityPool.weighted || 0, avgQ * offer.grams);
     draft.qualityPool.grams = Math.max(0, (draft.qualityPool.grams || 0) - offer.grams);
@@ -911,6 +938,7 @@ export const acceptOffer = (state: GameState, id: number | string) => {
     draft.offers = draft.offers.filter((o: any) => String(o.id) !== String(id));
     addXP(draft as any, 10);
   });
+  return checkQuestProgress(checkQuestProgress(next, 'sell', { amount: offer.grams }), 'cash', { amount: totalCash });
 };
 
 export const deliverApotheke = (state: GameState, id: number | string) => {
@@ -924,10 +952,12 @@ export const deliverApotheke = (state: GameState, id: number | string) => {
     });
   }
   if (state.grams < offer.grams) return state;
-  return produce(state, (draft) => {
+  let totalCash = 0;
+  const next = produce(state, (draft) => {
     const avgQ = (draft.qualityPool.grams || 0) > 0 ? draft.qualityPool.weighted / draft.qualityPool.grams : 1;
     const qMult = saleQualityMultiplier(avgQ);
     const total = offer.grams * offer.pricePerG * qMult;
+    totalCash = total;
     draft.grams -= offer.grams;
     const usedWeighted = Math.min(draft.qualityPool.weighted || 0, avgQ * offer.grams);
     draft.qualityPool.grams = Math.max(0, (draft.qualityPool.grams || 0) - offer.grams);
@@ -938,6 +968,7 @@ export const deliverApotheke = (state: GameState, id: number | string) => {
     draft.apothekenOffers = (draft.apothekenOffers || []).filter((o: any) => o.id !== id);
     addXP(draft as any, 12);
   });
+  return checkQuestProgress(checkQuestProgress(next, 'sell', { amount: offer.grams }), 'cash', { amount: totalCash });
 };
 
 export const deliverOrder = (state: GameState, id: number | string) => {
@@ -950,10 +981,12 @@ export const deliverOrder = (state: GameState, id: number | string) => {
     });
   }
   if (state.grams < order.grams) return state;
-  return produce(state, (draft) => {
+  let totalCash = 0;
+  const next = produce(state, (draft) => {
     const avgQ = (draft.qualityPool.grams || 0) > 0 ? draft.qualityPool.weighted / draft.qualityPool.grams : 1;
     const qMult = saleQualityMultiplier(avgQ);
     const total = order.grams * order.pricePerG * qMult;
+    totalCash = total;
     draft.grams -= order.grams;
     const usedWeighted = Math.min(draft.qualityPool.weighted || 0, avgQ * order.grams);
     draft.qualityPool.grams = Math.max(0, (draft.qualityPool.grams || 0) - order.grams);
@@ -965,6 +998,7 @@ export const deliverOrder = (state: GameState, id: number | string) => {
     draft.orders = draft.orders.filter((o: any) => String(o.id) !== String(id));
     addXP(draft as any, 12);
   });
+  return checkQuestProgress(checkQuestProgress(next, 'sell', { amount: order.grams }), 'cash', { amount: totalCash });
 };
 
 export const doPrestige = (state: GameState) => {
@@ -1036,9 +1070,24 @@ const addXP = (state: GameState, amt: number) => {
   amt = Math.max(0, Math.floor(amt || 0));
   if (amt <= 0) return;
   state.xp = (state.xp || 0) + amt;
+  const prevLevel = state.level || 1;
   while (state.xp >= xpForNext(state.level || 1)) {
     state.xp -= xpForNext(state.level || 1);
     state.level = (state.level || 1) + 1;
+  }
+  if (state.level !== prevLevel) {
+    syncQuests(state);
+    state.quests = (state.quests || []).map((qp) => {
+      const quest = QUESTS.find((q) => q.id === qp.id);
+      if (!quest) return qp;
+      const tasks = qp.tasks.map((t) => {
+        if (t.type === 'level' && state.level >= t.required) return { ...t, current: t.required };
+        return t;
+      });
+      const allDone = tasks.every((t) => (t.current || 0) >= t.required);
+      const status: QuestProgress['status'] = qp.status === 'claimed' ? 'claimed' : allDone ? 'ready' : qp.status;
+      return { ...qp, tasks, status };
+    });
   }
 };
 
@@ -1048,6 +1097,122 @@ export const xpForNext = (level: number) => {
 };
 
 const clampQualityValue = (q: number) => clamp(q, 0.4, CURING_QUALITY_CAP);
+
+const syncQuests = (state: GameState) => {
+  ensureQuestState(state);
+  const level = state.level || 1;
+  for (const quest of QUESTS) {
+    const meetsLevel = (quest.requirements?.minLevel || 0) <= level;
+    const already = state.quests?.some((q) => q.id === quest.id);
+    const done = state.completedQuests?.includes(quest.id);
+    if (meetsLevel && !already && !done) {
+      const progress: QuestProgress = {
+        id: quest.id,
+        tasks: quest.tasks.map((t) => {
+          const baseCurrent = t.type === 'level' && level >= t.required ? t.required : 0;
+          return { ...t, current: baseCurrent };
+        }),
+        status: 'active'
+      };
+      progress.status = progress.tasks.every((t) => (t.current || 0) >= t.required) ? 'ready' : 'active';
+      state.quests?.push(progress);
+    }
+  }
+  state.quests = (state.quests || []).map((qp) => {
+    const quest = QUESTS.find((q) => q.id === qp.id);
+    if (!quest) return qp;
+    const allDone = qp.tasks.every((t) => (t.current || 0) >= t.required);
+    return { ...qp, status: qp.status === 'claimed' ? 'claimed' : allDone ? 'ready' : 'active' };
+  });
+  state.activeQuests = (state.quests || []).filter((q) => q.status !== 'claimed').map((q) => q.id);
+  state.completedQuests = (state.quests || []).filter((q) => q.status === 'claimed').map((q) => q.id);
+};
+
+const applyQuestRewards = (state: GameState, questId: string) => {
+  const quest = QUESTS.find((q) => q.id === questId);
+  if (!quest) return;
+  ensureConsumables(state);
+  for (const reward of quest.rewards) {
+    if (reward.type === 'cash' && reward.value) {
+      state.cash += reward.value;
+      state.totalCashEarned += reward.value;
+    }
+    if (reward.type === 'xp' && reward.value) {
+      addXP(state as any, reward.value);
+    }
+    if (reward.type === 'item' && reward.id) {
+      state.itemsOwned[reward.id] = (state.itemsOwned[reward.id] || 0) + (reward.count || 1);
+    }
+    if (reward.type === 'consumable' && reward.id) {
+      const count = reward.count || 1;
+      if (reward.id === 'coffee_premium') state.consumables.coffee += count;
+      if (reward.id === 'fungicide') state.consumables.fungicide += count;
+      if (reward.id === 'spray') state.consumables.spray += count;
+      if (reward.id === 'nutrient') state.consumables.nutrient += count;
+      if (reward.id === 'beneficials') state.consumables.beneficials += count;
+    }
+    if (reward.type === 'seed' && reward.id) {
+      state.seeds[reward.id] = (state.seeds[reward.id] || 0) + (reward.count || 1);
+    }
+    if (reward.type === 'message' && reward.value) {
+      pushMessage(state, String(reward.value));
+    }
+  }
+};
+
+const matchesQuestTask = (task: any, action: string, payload: any) => {
+  if (!task) return false;
+  if (task.type !== action) return false;
+  if (task.target && payload?.target && String(task.target) !== String(payload.target)) return false;
+  if (task.target && payload?.strainId && String(task.target) !== String(payload.strainId)) return false;
+  return true;
+};
+
+export const checkQuestProgress = (state: GameState, action: 'harvest' | 'sell' | 'cash' | 'level', payload?: any) => {
+  return produce(state, (draft) => {
+    ensureQuestState(draft as any);
+    syncQuests(draft as any);
+    let anyReady = false;
+    for (const qp of draft.quests || []) {
+      if (qp.status === 'claimed') continue;
+      const quest = QUESTS.find((q) => q.id === qp.id);
+      if (!quest) continue;
+      qp.tasks = qp.tasks.map((t, idx) => {
+        const def = quest.tasks[idx] || t;
+        let current = t.current || 0;
+        const increment = payload?.amount ?? payload?.value ?? payload?.count ?? 1;
+        if (matchesQuestTask(def, action, payload)) {
+          current = Math.min(def.required, current + increment);
+        }
+        if (def.type === 'level' && (payload?.level || draft.level) >= def.required) {
+          current = def.required;
+        }
+        return { ...def, current };
+      });
+      if (qp.tasks.every((t) => (t.current || 0) >= t.required)) {
+        qp.status = 'ready';
+        anyReady = true;
+      }
+    }
+    draft.activeQuests = (draft.quests || []).filter((q) => q.status !== 'claimed').map((q) => q.id);
+    if (anyReady) {
+      pushMessage(draft as any, 'Quest bereit zum Abholen!', 'success');
+    }
+  });
+};
+
+export const claimQuestReward = (state: GameState, questId: string) => {
+  return produce(state, (draft) => {
+    ensureQuestState(draft as any);
+    const qp = (draft.quests || []).find((q) => q.id === questId);
+    if (!qp || qp.status !== 'ready') return;
+    applyQuestRewards(draft as any, questId);
+    qp.status = 'claimed';
+    draft.completedQuests = Array.from(new Set([...(draft.completedQuests || []), questId]));
+    draft.activeQuests = (draft.quests || []).filter((q) => q.status !== 'claimed').map((q) => q.id);
+    pushMessage(draft as any, `Quest "${questId}" abgeschlossen!`, 'success');
+  });
+};
 
 const fillDryingSlots = (proc: ProcessingState) => {
   while ((proc.drying || []).length < (proc.slots?.drying || 0) && (proc.wet || []).length > 0) {
@@ -1198,7 +1363,7 @@ export const harvestPlant = (state: GameState, slotIndex: number) => {
   const qm = qualityMultiplier(state, plant);
   const gain = harvestYieldFor(state, plant) * qm;
   const dryEstimate = gain * DRY_WEIGHT_MULT;
-  return produce(state, (draft) => {
+  const next = produce(state, (draft) => {
     const proc = ensureProcessing(draft);
     proc.wet.push({ id: uid(), strainId: plant.strainId, grams: gain, quality: qm, stage: 'wet', createdAt: Date.now() });
     fillDryingSlots(proc);
@@ -1206,6 +1371,7 @@ export const harvestPlant = (state: GameState, slotIndex: number) => {
     const tierBonus = qm >= 1.3 ? 1.5 : qm >= 1.1 ? 1.2 : 1;
     addXP(draft as any, Math.max(1, Math.floor((dryEstimate / 50) * tierBonus)));
   });
+  return checkQuestProgress(next, 'harvest', { strainId: plant.strainId, amount: gain });
 };
 
 export const removePlant = (state: GameState, slotIndex: number) => {
@@ -1316,12 +1482,14 @@ export const bulkFeed = (state: GameState) => {
 };
 
 export const harvestAllReady = (state: GameState) => {
-  return produce(state, (draft) => {
+  let totalGain = 0;
+  const next = produce(state, (draft) => {
     const proc = ensureProcessing(draft);
     const ready = draft.plants.filter((p) => p.growProg >= 1);
     ready.forEach((p) => {
       const qm = qualityMultiplier(draft as any, p);
       const gain = harvestYieldFor(draft as any, p) * qm;
+      totalGain += gain;
       const dryEstimate = gain * DRY_WEIGHT_MULT;
       proc.wet.push({ id: uid(), strainId: p.strainId, grams: gain, quality: qm, stage: 'wet', createdAt: Date.now() });
       addXP(draft as any, Math.max(1, Math.floor(dryEstimate / 50)));
@@ -1329,6 +1497,10 @@ export const harvestAllReady = (state: GameState) => {
     draft.plants = draft.plants.filter((p) => p.growProg < 1);
     fillDryingSlots(proc);
   });
+  if (totalGain > 0) {
+    return checkQuestProgress(next, 'harvest', { amount: totalGain });
+  }
+  return next;
 };
 
 export const unlockSlot = (state: GameState) => {
