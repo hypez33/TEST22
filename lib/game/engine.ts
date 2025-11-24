@@ -21,7 +21,6 @@ import {
   MAX_ACTIVE_OFFERS_BASE,
   MAX_SLOTS,
   NUTRIENT_ADD_AMOUNT,
-  NUTRIENT_CONSUMABLE_PRICE,
   NUTRIENT_DRAIN_PER_SEC,
   NUTRIENT_MAX,
   NUTRIENT_START,
@@ -36,16 +35,23 @@ import {
   STAGE_LABELS,
   STRAINS,
   WATER_ADD_AMOUNT,
-  WATER_CONSUMABLE_PRICE,
   WATER_DRAIN_PER_SEC,
   WATER_MAX,
   WATER_START,
   buildCaseConfigs
 } from './data';
-import { CaseStats, CartEntry, GameState, Plant, Rarity, Strain } from './types';
+import { CaseStats, CartEntry, GameState, Plant, ProcessedBatch, ProcessingState, Rarity, Strain } from './types';
 import { clamp, defaultCaseStats, fmtNumber } from './utils';
 
 export const SPEED_OPTIONS = [0, 0.5, 1, 2, 7];
+const DRYING_TIME_SEC = 240;
+const CURING_TIME_SEC = 300;
+const DRY_WEIGHT_MULT = 0.3;
+const DRY_PRICE_MULT = 1.5;
+const CURING_QUALITY_BONUS = 0.25;
+const CURING_QUALITY_CAP = 2.2;
+const WATER_COST = 0.2;
+const uid = () => Math.random().toString(36).slice(2, 9);
 
 export const createInitialState = (): GameState => ({
   grams: 0,
@@ -80,6 +86,7 @@ export const createInitialState = (): GameState => ({
   seeds: {},
   cart: [],
   consumables: { water: 0, nutrient: 0, spray: 0, fungicide: 0, beneficials: 0, pgr: 0 },
+  processing: { wet: [], drying: [], curing: [], ready: [], slots: { drying: 2, curing: 2 } },
   difficulty: 'normal',
   marketMult: 1,
   marketTrend: 'stable',
@@ -139,6 +146,26 @@ const ensureConsumables = (state: any): GameState => {
   return next;
 };
 
+const ensureProcessing = (state: any): ProcessingState => {
+  const normalize = (source?: Partial<ProcessingState>): ProcessingState => {
+    const slots = source?.slots || { drying: 2, curing: 2 };
+    return {
+      wet: Array.isArray(source?.wet) ? source!.wet : [],
+      drying: Array.isArray(source?.drying) ? source!.drying : [],
+      curing: Array.isArray(source?.curing) ? source!.curing : [],
+      ready: Array.isArray(source?.ready) ? source!.ready : [],
+      slots: { drying: Math.max(1, slots.drying || 2), curing: Math.max(1, slots.curing || 2) }
+    };
+  };
+  if (isDraft(state)) {
+    state.processing = normalize(state.processing);
+    return state.processing;
+  }
+  const next = state as GameState;
+  next.processing = normalize((state as GameState).processing);
+  return next.processing;
+};
+
 export const getAllStrains = (state: GameState) => STRAINS.concat(state.customStrains || []);
 
 export const getStrain = (state: GameState, id: string): Strain => {
@@ -160,6 +187,7 @@ export const hydrateState = (loaded?: Partial<GameState>): GameState => {
     draft.plants = Array.isArray(loaded?.plants) ? loaded!.plants : [];
     draft.plants.forEach((p) => ensurePlantDefaults(p));
     ensureConsumables(draft);
+    ensureProcessing(draft);
     draft.lastTime = typeof draft.lastTime === 'number' ? draft.lastTime : Date.now();
     draft.seeds = draft.seeds || {};
     draft.itemsOwned = draft.itemsOwned || {};
@@ -358,7 +386,8 @@ export const computePerSec = (state: GameState) => {
     const slow = p.water <= 0 || p.nutrients <= 0 ? 0.25 : 1;
     const d = DIFFICULTIES[state.difficulty] || DIFFICULTIES.normal;
     const effTime = growTimeFor(state, p) / (d.growth || 1);
-    return sum + ((harvestYieldFor(state, p) * qualityMultiplier(state, p)) / effTime) * slow;
+    const dryPer = harvestYieldFor(state, p) * qualityMultiplier(state, p) * DRY_WEIGHT_MULT;
+    return sum + (dryPer / effTime) * slow;
   }, 0);
   return base * getTimeSpeed(state);
 };
@@ -748,6 +777,7 @@ export const tickState = (state: GameState, realSeconds: number): GameState => {
     if (worldDt <= 0) return;
     draft.plants.forEach((p) => advancePlant(draft as any, p, worldDt));
     advanceGameTime(draft as any, worldDt);
+    advanceProcessing(draft as any, worldDt);
     // offers timers
     draft.nextOfferIn = Math.max(0, (draft.nextOfferIn || 0) - worldDt);
     draft.nextApothekenOfferIn = Math.max(0, (draft.nextApothekenOfferIn || 0) - worldDt);
@@ -994,6 +1024,148 @@ export const xpForNext = (level: number) => {
   return Math.floor(100 * Math.pow(1.35, level - 1));
 };
 
+const clampQualityValue = (q: number) => clamp(q, 0.4, CURING_QUALITY_CAP);
+
+const fillDryingSlots = (proc: ProcessingState) => {
+  while ((proc.drying || []).length < (proc.slots?.drying || 0) && (proc.wet || []).length > 0) {
+    const wet = proc.wet.shift();
+    if (!wet) break;
+    proc.drying.push({
+      id: wet.id,
+      strainId: wet.strainId,
+      wetGrams: wet.grams,
+      quality: wet.quality,
+      remaining: DRYING_TIME_SEC,
+      total: DRYING_TIME_SEC,
+      startedAt: Date.now()
+    });
+  }
+};
+
+const advanceProcessing = (state: GameState, worldDt: number) => {
+  if (worldDt <= 0) return;
+  const proc = ensureProcessing(state);
+  proc.drying = (proc.drying || []).filter((job) => {
+    job.remaining = Math.max(0, job.remaining - worldDt);
+    if (job.remaining <= 0) {
+      const grams = Math.max(0, job.wetGrams * DRY_WEIGHT_MULT);
+      const q = clampQualityValue(job.quality * DRY_PRICE_MULT);
+      proc.ready.push({ id: job.id, strainId: job.strainId, grams, quality: q, stage: 'dry', createdAt: Date.now() });
+      return false;
+    }
+    return true;
+  });
+
+  proc.curing = (proc.curing || []).filter((job) => {
+    const total = job.total || CURING_TIME_SEC;
+    const startQ = job.startQuality ?? job.quality;
+    job.remaining = Math.max(0, job.remaining - worldDt);
+    const progress = clamp(1 - job.remaining / total, 0, 1);
+    job.quality = clampQualityValue(startQ + (job.targetQuality - startQ) * progress);
+    if (job.remaining <= 0) {
+      proc.ready.push({
+        id: job.id,
+        strainId: job.strainId,
+        grams: job.grams,
+        quality: job.targetQuality,
+        stage: 'cured',
+        createdAt: Date.now()
+      });
+      return false;
+    }
+    return true;
+  });
+
+  fillDryingSlots(proc);
+};
+
+export const startDrying = (state: GameState, batchId?: string) => {
+  const proc = ensureProcessing(state);
+  const hasSpace = (proc.slots?.drying || 0) > (proc.drying || []).length;
+  if (!hasSpace || (proc.wet || []).length === 0) return state;
+  return produce(state, (draft) => {
+    const p = ensureProcessing(draft);
+    if (!batchId) {
+      fillDryingSlots(p);
+      return;
+    }
+    const idx = batchId ? p.wet.findIndex((b) => b.id === batchId) : 0;
+    if (idx === -1) return;
+    const wet = p.wet.splice(idx, 1)[0];
+    if (!wet) return;
+    p.drying.push({
+      id: wet.id,
+      strainId: wet.strainId,
+      wetGrams: wet.grams,
+      quality: wet.quality,
+      remaining: DRYING_TIME_SEC,
+      total: DRYING_TIME_SEC,
+      startedAt: Date.now()
+    });
+  });
+};
+
+export const startCuring = (state: GameState, batchId: string) => {
+  const proc = ensureProcessing(state);
+  if ((proc.curing || []).length >= (proc.slots?.curing || 0)) return state;
+  const readyIdx = (proc.ready || []).findIndex((b) => b.id === batchId && b.stage === 'dry');
+  if (readyIdx === -1) return state;
+  return produce(state, (draft) => {
+    const p = ensureProcessing(draft);
+    const idx = (p.ready || []).findIndex((b) => b.id === batchId && b.stage === 'dry');
+    if (idx === -1) return;
+    const batch = p.ready.splice(idx, 1)[0];
+    const duration = CURING_TIME_SEC;
+    const target = clampQualityValue(batch.quality * (1 + CURING_QUALITY_BONUS));
+    p.curing.push({
+      id: batch.id,
+      strainId: batch.strainId,
+      grams: batch.grams,
+      quality: batch.quality,
+      startQuality: batch.quality,
+      targetQuality: target,
+      remaining: duration,
+      total: duration,
+      startedAt: Date.now()
+    });
+  });
+};
+
+export const collectProcessed = (state: GameState, batchId: string) => {
+  const proc = ensureProcessing(state);
+  const idx = (proc.ready || []).findIndex((b) => b.id === batchId);
+  if (idx === -1) return state;
+  return produce(state, (draft) => {
+    const p = ensureProcessing(draft);
+    const i = (p.ready || []).findIndex((b) => b.id === batchId);
+    if (i === -1) return;
+    const batch = p.ready.splice(i, 1)[0];
+    const q = clampQualityValue(batch.quality);
+    draft.grams += batch.grams;
+    draft.totalEarned += batch.grams;
+    draft.qualityPool.grams = (draft.qualityPool.grams || 0) + batch.grams;
+    draft.qualityPool.weighted = (draft.qualityPool.weighted || 0) + batch.grams * q;
+    addXP(draft as any, Math.max(1, Math.floor(batch.grams / 40)));
+  });
+};
+
+export const collectAllProcessed = (state: GameState) => {
+  const proc = ensureProcessing(state);
+  if ((proc.ready || []).length === 0) return state;
+  return produce(state, (draft) => {
+    const p = ensureProcessing(draft);
+    for (const batch of p.ready) {
+      const q = clampQualityValue(batch.quality);
+      draft.grams += batch.grams;
+      draft.totalEarned += batch.grams;
+      draft.qualityPool.grams = (draft.qualityPool.grams || 0) + batch.grams;
+      draft.qualityPool.weighted = (draft.qualityPool.weighted || 0) + batch.grams * q;
+      addXP(draft as any, Math.max(1, Math.floor(batch.grams / 40)));
+    }
+    p.ready = [];
+  });
+};
+
 export const harvestPlant = (state: GameState, slotIndex: number) => {
   const idx = state.plants.findIndex((p) => p.slot === slotIndex);
   if (idx === -1) return state;
@@ -1002,15 +1174,14 @@ export const harvestPlant = (state: GameState, slotIndex: number) => {
   if ((state.itemsOwned['shears'] || 0) <= 0) return state;
   const qm = qualityMultiplier(state, plant);
   const gain = harvestYieldFor(state, plant) * qm;
+  const dryEstimate = gain * DRY_WEIGHT_MULT;
   return produce(state, (draft) => {
-    draft.grams += gain;
-    draft.totalEarned += gain;
-    const q = qm;
-    draft.qualityPool.grams = (draft.qualityPool.grams || 0) + gain;
-    draft.qualityPool.weighted = (draft.qualityPool.weighted || 0) + gain * q;
+    const proc = ensureProcessing(draft);
+    proc.wet.push({ id: uid(), strainId: plant.strainId, grams: gain, quality: qm, stage: 'wet', createdAt: Date.now() });
+    fillDryingSlots(proc);
     draft.plants = draft.plants.filter((p) => p.slot !== slotIndex);
-    const tierBonus = q >= 1.3 ? 1.5 : q >= 1.1 ? 1.2 : 1;
-    addXP(draft as any, Math.max(1, Math.floor((gain / 50) * tierBonus)));
+    const tierBonus = qm >= 1.3 ? 1.5 : qm >= 1.1 ? 1.2 : 1;
+    addXP(draft as any, Math.max(1, Math.floor((dryEstimate / 50) * tierBonus)));
   });
 };
 
@@ -1028,10 +1199,9 @@ export const removePlant = (state: GameState, slotIndex: number) => {
 export const waterPlant = (state: GameState, slotIndex: number) => {
   const plant = state.plants.find((p) => p.slot === slotIndex);
   if (!plant) return state;
-  const ensured = ensureConsumables(state);
-  if (ensured.consumables.water <= 0) return ensured;
-  return produce(ensured, (draft: any) => {
-    draft.consumables.water -= 1;
+  if ((state.cash || 0) < WATER_COST) return state;
+  return produce(state, (draft: any) => {
+    draft.cash = Math.max(0, (draft.cash || 0) - WATER_COST);
     const p = draft.plants.find((pl: any) => pl.slot === slotIndex);
     if (p) p.water = Math.min(WATER_MAX, (p.water || 0) + WATER_ADD_AMOUNT);
   });
@@ -1082,19 +1252,23 @@ export const treatPlant = (state: GameState, slotIndex: number) => {
 };
 
 export const bulkWater = (state: GameState) => {
-  const ensured = ensureConsumables(state);
-  const needy = ensured.plants.filter((p: any) => p.water < WATER_MAX * 0.6 && p.health > 0);
-  if (needy.length === 0 || ensured.consumables.water <= 0) return ensured;
-  return produce(ensured, (draft: any) => {
-    let remaining = draft.consumables.water;
+  const needy = state.plants.filter((p: any) => p.water < WATER_MAX * 0.6 && p.health > 0);
+  if (needy.length === 0) return state;
+  const maxAffordable = Math.floor((state.cash || 0) / WATER_COST);
+  if (maxAffordable <= 0) return state;
+  const toWater = Math.min(needy.length, maxAffordable);
+  return produce(state, (draft: any) => {
+    let budget = draft.cash || 0;
+    let watered = 0;
     for (const plant of draft.plants) {
-      if (remaining <= 0) break;
-      if (plant.water < WATER_MAX * 0.6 && plant.health > 0) {
+      if (watered >= toWater) break;
+      if (plant.water < WATER_MAX * 0.6 && plant.health > 0 && budget >= WATER_COST) {
         plant.water = Math.min(WATER_MAX, plant.water + WATER_ADD_AMOUNT);
-        remaining -= 1;
+        budget -= WATER_COST;
+        watered += 1;
       }
     }
-    draft.consumables.water = Math.max(0, remaining);
+    draft.cash = budget;
   });
 };
 
@@ -1118,17 +1292,17 @@ export const bulkFeed = (state: GameState) => {
 
 export const harvestAllReady = (state: GameState) => {
   return produce(state, (draft) => {
+    const proc = ensureProcessing(draft);
     const ready = draft.plants.filter((p) => p.growProg >= 1);
     ready.forEach((p) => {
-      const gain = harvestYieldFor(draft as any, p) * qualityMultiplier(draft as any, p);
-      draft.grams += gain;
-      draft.totalEarned += gain;
-      const q = qualityMultiplier(draft as any, p);
-      draft.qualityPool.grams = (draft.qualityPool.grams || 0) + gain;
-      draft.qualityPool.weighted = (draft.qualityPool.weighted || 0) + gain * q;
-      addXP(draft as any, Math.max(1, Math.floor(gain / 50)));
+      const qm = qualityMultiplier(draft as any, p);
+      const gain = harvestYieldFor(draft as any, p) * qm;
+      const dryEstimate = gain * DRY_WEIGHT_MULT;
+      proc.wet.push({ id: uid(), strainId: p.strainId, grams: gain, quality: qm, stage: 'wet', createdAt: Date.now() });
+      addXP(draft as any, Math.max(1, Math.floor(dryEstimate / 50)));
     });
     draft.plants = draft.plants.filter((p) => p.growProg < 1);
+    fillDryingSlots(proc);
   });
 };
 
@@ -1221,23 +1395,11 @@ const pack = CONSUMABLE_PACKS.find((p) => p.id === packId);
   return produce(state, (draft) => {
     draft.cash -= pack.price;
     ensureConsumables(draft);
-    draft.consumables.water += pack.add.water || 0;
     draft.consumables.nutrient += pack.add.nutrient || 0;
     draft.consumables.spray += pack.add.spray || 0;
     draft.consumables.fungicide += pack.add.fungicide || 0;
     draft.consumables.beneficials += pack.add.beneficials || 0;
     draft.consumables.pgr = (draft.consumables.pgr || 0) + (pack.add.pgr || 0);
-  });
-};
-
-export const buyWaterCanister = (state: GameState, type: 'water' | 'nutrient') => {
-  const price = type === 'water' ? WATER_CONSUMABLE_PRICE : NUTRIENT_CONSUMABLE_PRICE;
-  if (state.cash < price) return state;
-  return produce(state, (draft) => {
-    draft.cash -= price;
-    ensureConsumables(draft);
-    if (type === 'water') draft.consumables.water += 1;
-    else draft.consumables.nutrient += 1;
   });
 };
 
@@ -1448,11 +1610,8 @@ export const checkoutCart = (state: GameState) => {
       }
       if (entry.kind === 'consumable') {
         ensureConsumables(draft);
-        if (entry.id === 'water') draft.consumables.water += entry.qty;
-        if (entry.id === 'nutrient') draft.consumables.nutrient += entry.qty;
         const pack = CONSUMABLE_PACKS.find((p) => p.id === entry.id);
         if (pack?.add) {
-          draft.consumables.water += pack.add.water || 0;
           draft.consumables.nutrient += pack.add.nutrient || 0;
           draft.consumables.spray += pack.add.spray || 0;
           draft.consumables.fungicide += pack.add.fungicide || 0;
@@ -1485,6 +1644,12 @@ export const formatResources = (state: GameState) => ({
   xp: state.xp,
   xpNeed: xpForNext(state.level || 1)
 });
+
+export const DRYING_TIME = DRYING_TIME_SEC;
+export const CURING_TIME = CURING_TIME_SEC;
+export const DRY_WEIGHT_MULTIPLIER = DRY_WEIGHT_MULT;
+export const DRY_PRICE_MULTIPLIER = DRY_PRICE_MULT;
+export const WATER_COST_PER_USE = WATER_COST;
 
 export { SAVE_KEY };
 
@@ -1593,7 +1758,8 @@ const performEmployeeTask = (state: GameState, task: string) => {
   }
   const efficiency = 1 + (empLevel - 1) * 0.1;
   if (task === 'water') {
-    if (plant.water < WATER_MAX * 0.5 && (state.itemsOwned['watering_can'] || 0) > 0) {
+    if (plant.water < WATER_MAX * 0.5 && (state.cash || 0) >= WATER_COST) {
+      state.cash = Math.max(0, (state.cash || 0) - WATER_COST);
       plant.water = Math.min(WATER_MAX, plant.water + WATER_ADD_AMOUNT * 0.5 * efficiency);
     }
   } else if (task === 'feed') {
@@ -1717,21 +1883,20 @@ export const fireContract = (state: GameState, id: string) =>
 export const questConditions = (state: GameState) => {
   const hasJob = !!state.jobId;
   const hasSeed = Object.values(state.seeds || {}).some((v) => v > 0);
-  const hasCan = (state.itemsOwned?.['watering_can'] || 0) > 0;
   const hasShears = (state.itemsOwned?.['shears'] || 0) > 0;
   const hasNutrient = (state.consumables?.nutrient || 0) > 0;
   const hasFungicide = (state.consumables?.fungicide || 0) > 0;
   const hasSpray = (state.consumables?.spray || 0) > 0;
   const hasPlant = Array.isArray(state.plants) && state.plants.length > 0;
   const timeRunning = getTimeSpeed(state) > 0;
-  return { hasJob, hasSeed, hasCan, hasShears, hasNutrient, hasFungicide, hasSpray, hasPlant, timeRunning };
+  return { hasJob, hasSeed, hasShears, hasNutrient, hasFungicide, hasSpray, hasPlant, timeRunning };
 };
 
 export const advanceQuest = (state: GameState) => {
   const conditions = questConditions(state);
   let step = state.questStep || 0;
   if (step === 0 && conditions.hasJob) step = 1;
-  if (step === 1 && conditions.hasSeed && conditions.hasCan && conditions.hasShears && conditions.hasNutrient && conditions.hasFungicide && conditions.hasSpray) step = 2;
+  if (step === 1 && conditions.hasSeed && conditions.hasShears && conditions.hasNutrient && conditions.hasFungicide && conditions.hasSpray) step = 2;
   if (step === 2 && conditions.hasPlant && conditions.timeRunning) step = 3;
   if (step !== state.questStep) {
     return produce(state, (draft) => {

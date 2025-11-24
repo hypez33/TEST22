@@ -22,11 +22,11 @@ export function FarmTab({ state, perSec, actions }: Props) {
     <section id="tab-farm" className="tab active">
       <div className="row summary">
         <div className="summary-item">
-          <div className="label">Konto</div>
+          <div className="label">Lager (trocken)</div>
           <div className="value">{fmtNumber(state.grams)} g</div>
         </div>
         <div className="summary-item">
-          <div className="label">Produktion</div>
+          <div className="label">Produktion (trocken)</div>
           <div className="value">{fmtNumber(perSec)} g/s</div>
         </div>
         <div className="summary-item">

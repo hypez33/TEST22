@@ -21,9 +21,11 @@ import { useGameState } from '@/lib/game/useGameState';
 import { formatGameClock } from '@/lib/game/engine';
 import { RightPanel } from './components/RightPanel';
 import { SettingsTab } from './components/tabs/SettingsTab';
+import { ProcessingTab } from './components/tabs/ProcessingTab';
 
 const TABS = [
   { id: 'farm', label: 'Farm', icon: 'fi fi-sr-leaf' },
+  { id: 'processing', label: 'Verarbeitung', icon: 'fi fi-sr-layers' },
   { id: 'cases', label: 'Cases', icon: 'fi fi-sr-dice' },
   { id: 'inventory', label: 'Inventar', icon: 'fi fi-sr-box-open' },
   { id: 'trade', label: 'Growmarkt', icon: 'fi fi-sr-store-alt' },
@@ -50,6 +52,8 @@ export default function Page() {
     switch (id) {
       case 'farm':
         return <FarmTab state={state} perSec={derived.perSec} actions={actions} />;
+      case 'processing':
+        return <ProcessingTab state={state} actions={actions} />;
       case 'trade':
         return <ShopTab state={state} actions={actions} />;
       case 'inventory':

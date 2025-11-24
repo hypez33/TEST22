@@ -38,6 +38,47 @@ export interface Plant {
   pgrBoostSec?: number;
 }
 
+export type BatchStage = 'wet' | 'dry' | 'cured' | 'drying';
+
+export interface ProcessedBatch {
+  id: string;
+  strainId?: string;
+  grams: number;
+  quality: number;
+  stage: BatchStage;
+  createdAt?: number;
+}
+
+export interface DryingJob {
+  id: string;
+  strainId?: string;
+  wetGrams: number;
+  quality: number;
+  remaining: number;
+  total: number;
+  startedAt?: number;
+}
+
+export interface CuringJob {
+  id: string;
+  strainId?: string;
+  grams: number;
+  quality: number;
+  startQuality?: number;
+  targetQuality: number;
+  remaining: number;
+  total: number;
+  startedAt?: number;
+}
+
+export interface ProcessingState {
+  wet: ProcessedBatch[];
+  drying: DryingJob[];
+  curing: CuringJob[];
+  ready: ProcessedBatch[];
+  slots: { drying: number; curing: number };
+}
+
 export interface Consumables {
   water: number;
   nutrient: number;
@@ -250,6 +291,7 @@ export interface GameState {
   seeds: Record<string, number>;
   cart: CartEntry[];
   consumables: Consumables;
+  processing: ProcessingState;
   difficulty: Difficulty;
   marketMult: number;
   marketTrend?: 'up' | 'down' | 'stable';

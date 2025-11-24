@@ -92,7 +92,7 @@ function QuestPanel({ state }: { state: GameState }) {
               <div>
                 <strong>Quest 2:</strong> Shop-Grundausstattung kaufen
               </div>
-              <div className="quest-muted">Samen, Giesskanne, Schere, Dünger, Fungizid, Spray</div>
+              <div className="quest-muted">Samen, Schere, Dünger, Fungizid, Spray</div>
             </div>
           </div>
         </div>

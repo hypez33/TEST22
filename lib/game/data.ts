@@ -43,9 +43,6 @@ export const QUALITY_GAIN_GOOD = 0.03;
 export const QUALITY_LOSS_BAD = 0.06;
 export const READY_DECAY_DELAY = 45;
 
-export const WATER_CONSUMABLE_PRICE = 5;
-export const NUTRIENT_CONSUMABLE_PRICE = 7;
-
 export const DIFFICULTIES = {
   easy: { name: 'Leicht', growth: 1.35, pest: 0.7 },
   normal: { name: 'Normal', growth: 1.15, pest: 1.0 },
@@ -136,7 +133,6 @@ export const GLOBAL_UPGRADES: GlobalUpgrade[] = [
 
 export const ITEMS: Item[] = [
   { id: 'shears', name: 'Schere', icon: 'SC', cost: 80, desc: 'Zum Ernten erforderlich', category: 'tools', effects: {} },
-  { id: 'watering_can', name: 'Giesskanne', icon: 'WC', cost: 60, desc: 'Zum Waessern erforderlich', category: 'tools', effects: {} },
   { id: 'nutrients', name: 'Duenger-Set', icon: 'DN', cost: 110, desc: 'Zum Fuettern erforderlich', category: 'tools', effects: {} },
   { id: 'scale', name: 'Praezisionswaage', icon: 'SW', cost: 150, desc: '+5% Verkaufspreis', category: 'commerce', effects: { priceMult: 1.05 } },
   { id: 'jars', name: 'Curing-Glaeser', icon: 'JG', cost: 300, desc: '+10% Verkaufspreis', category: 'commerce', effects: { priceMult: 1.1 } },
@@ -157,13 +153,11 @@ export const ITEMS: Item[] = [
   { id: 'hydro_system', name: 'Hydroponik-System', icon: 'HS', cost: 2000, desc: '+10% Pflanzenertrag', category: 'equipment', effects: { yieldMult: 1.1 } },
   { id: 'led_panel', name: 'LED-Panel', icon: 'LP', cost: 1800, desc: 'Beschleunigt Wachstum', category: 'equipment', effects: { growthMult: 1.15 } },
   { id: 'co2_generator', name: 'CO2-Generator', icon: 'CO2', cost: 2500, desc: '+15% Pflanzenertrag', category: 'equipment', effects: { yieldMult: 1.15 } },
-  { id: 'auto_waterer', name: 'Automatische Bewässerung', icon: 'AW', cost: 2200, desc: 'Reduziert Wasserverbrauch', category: 'equipment', effects: { waterReduce: 0.2 } },
   { id: 'pest_trap', name: 'Schädlingsfalle', icon: 'PT', cost: 1600, desc: 'Reduziert Schädlinge', category: 'equipment', effects: { pestReduce: { mites: 0.3, thrips: 0.3 } } },
   { id: 'soil_tester', name: 'Boden-Tester', icon: 'ST', cost: 1300, desc: 'Verbessert Nährstoffaufnahme', category: 'tools', effects: { nutrientBoost: 0.1 } },
   { id: 'grow_tent', name: 'Grow-Zelt', icon: 'GT', cost: 3000, desc: '+20% Pflanzenertrag', category: 'equipment', effects: { yieldMult: 1.2 } },
   { id: 'extraction_machine', name: 'Extraktionsmaschine', icon: 'EM', cost: 4000, desc: '+25% Verkaufspreis', category: 'equipment', effects: { priceMult: 1.25 } },
   { id: 'plasma_lantern', name: 'Plasma-Lantern', icon: 'PL', cost: 5200, desc: 'Pulslicht +12% Wachstum', category: 'equipment', effects: { growthMult: 1.12 } },
-  { id: 'nano_reservoir', name: 'Nano-Reservoir', icon: 'NR', cost: 3600, desc: 'Speichert Giesswasser, -30% Verbrauch', category: 'equipment', effects: { waterReduce: 0.3 } },
   { id: 'quantum_rootnet', name: 'Quantum Rootnet', icon: 'QR', cost: 4400, desc: 'Sensorwurzelnetz +12% Ertrag, +5% Qualitaet', category: 'equipment', effects: { yieldMult: 1.12, qualityMult: 1.05 } },
   { id: 'ion_shower', name: 'Ionendusche', icon: 'IS', cost: 4800, desc: 'Erlebnisverkauf +18% Preis', category: 'equipment', effects: { priceMult: 1.18 } },
   { id: 'lunar_timer', name: 'Lunar-Timer', icon: 'LT', cost: 950, desc: 'Mondphasen-Timing +8% Wachstum', category: 'tools', effects: { growthMult: 1.08 } },

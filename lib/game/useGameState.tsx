@@ -11,7 +11,6 @@ import {
   buyConsumablePack,
   buyItem,
   buySeed,
-  buyWaterCanister,
   checkoutCart,
   clearCart,
   removeCartEntry,
@@ -55,7 +54,11 @@ import {
   waterPlant,
   feedPlant,
   deliverOrder,
-  applyForJob
+  applyForJob,
+  startDrying,
+  startCuring,
+  collectProcessed,
+  collectAllProcessed
 } from './engine';
 import { GameState } from './types';
 
@@ -80,7 +83,6 @@ const buildActions = (setState: React.Dispatch<React.SetStateAction<GameState>>)
   buySeed: (strainId: string) => setState((s) => buySeed(s, strainId)),
   buyItem: (itemId: string) => setState((s) => buyItem(s, itemId)),
   buyPack: (packId: string) => setState((s) => buyConsumablePack(s, packId)),
-  buyWater: (type: 'water' | 'nutrient') => setState((s) => buyWaterCanister(s, type)),
   openCase: (caseId: string, fast?: boolean) => setState((s) => openCase(s, caseId, fast)),
   sell: (grams: number) => setState((s) => sellGrams(s, grams)),
   addToCart: (entry: any) => setState((s) => addToCart(s, entry)),
@@ -105,6 +107,10 @@ const buildActions = (setState: React.Dispatch<React.SetStateAction<GameState>>)
   hireEmployee: (id: string) => setState((s) => hireEmployee(s, id)),
   upgradeEmployee: (id: string) => setState((s) => upgradeEmployee(s, id)),
   fireEmployee: (id: string) => setState((s) => fireEmployee(s, id)),
+  startDrying: (batchId?: string) => setState((s) => startDrying(s, batchId)),
+  startCuring: (batchId: string) => setState((s) => startCuring(s, batchId)),
+  collectProcessed: (batchId: string) => setState((s) => collectProcessed(s, batchId)),
+  collectAllProcessed: () => setState((s) => collectAllProcessed(s)),
   setBreedingParent: (parent: 1 | 2, strain: string | null) => setState((s) => setBreedingParent(s, parent, strain)),
   performBreeding: () => setState((s) => performBreeding(s)),
   buyContract: (id: string) => setState((s) => buyContract(s, id)),
