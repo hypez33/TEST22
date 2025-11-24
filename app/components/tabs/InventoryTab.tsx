@@ -5,6 +5,7 @@ import { GameActions } from '@/lib/game/useGameState';
 import { CONSUMABLE_PACKS, ITEMS } from '@/lib/game/data';
 import { fmtNumber } from '@/lib/game/utils';
 import { getAllStrains, itemCost, seedCost } from '@/lib/game/engine';
+import { Tooltip } from '../ui/Tooltip';
 
 type Props = {
   state: GameState;

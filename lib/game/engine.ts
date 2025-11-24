@@ -42,9 +42,11 @@ import {
 } from './data';
 import { CaseStats, CartEntry, GameState, Plant, ProcessedBatch, ProcessingState, QuestProgress, Rarity, Strain } from './types';
 import { QUESTS } from './quests';
+import { ACHIEVEMENTS } from './achievements';
 import { clamp, defaultCaseStats, fmtNumber } from './utils';
 
 export const SPEED_OPTIONS = [0, 0.5, 1, 2, 7];
+const SAVE_VERSION = 2;
 const DRYING_TIME_SEC = 240;
 const CURING_TIME_SEC = 300;
 const DRY_WEIGHT_MULT = 0.3;
@@ -57,8 +59,10 @@ const ROSIN_MIN_QUALITY = 1;
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 export const createInitialState = (): GameState => ({
+  saveVersion: SAVE_VERSION,
   grams: 0,
   concentrates: 0,
+  priceHistory: [],
   totalEarned: 0,
   bestPerSec: 0,
   hazePoints: 0,
@@ -92,9 +96,13 @@ export const createInitialState = (): GameState => ({
   consumables: { water: 0, nutrient: 0, spray: 0, fungicide: 0, beneficials: 0, pgr: 0, coffee: 0 },
   marketTrendMult: 1,
   marketTrendName: 'Stabil',
+  marketNews: '',
+  marketNewsTimer: 0,
+  marketNewsMult: 1,
   quests: [],
   activeQuests: [],
   completedQuests: [],
+  unlockedAchievements: [],
   processing: { wet: [], drying: [], curing: [], ready: [], slots: { drying: 2, curing: 2 } },
   difficulty: 'normal',
   marketMult: 1,
@@ -133,8 +141,10 @@ export const createInitialState = (): GameState => ({
   questStep: 0,
   favorites: [],
   bulkConserve: false,
+  soundFx: true,
   breedingSlots: { parent1: null, parent2: null },
-  _empTimer: 0
+  _empTimer: 0,
+  _achTimer: 0
 });
 
 const ensureConsumables = (state: any): GameState => {
@@ -165,6 +175,12 @@ const MARKET_TRENDS = [
   { id: 'organic', name: 'Bio-Boom', mult: 1.1, desc: 'Bio-Käufer zahlen mehr.' },
   { id: 'glut', name: 'Markt-Glut', mult: 0.85, desc: 'Übersättigung. -15% Preis' },
   { id: 'stable', name: 'Stabil', mult: 1.0, desc: 'Normale Nachfrage.' }
+];
+
+const MARKET_NEWS = [
+  { name: 'Polizei-Razzia in der Stadt! Preise steigen', mult: 1.2, duration: 300 },
+  { name: 'Große Ernteflut! Preise sinken', mult: 0.85, duration: 240 },
+  { name: 'Medizinischer Boom', mult: 1.15, duration: 360 }
 ];
 
 const ensureProcessing = (state: any): ProcessingState => {
@@ -207,6 +223,18 @@ const ensureQuestState = (state: GameState) => {
   state.marketTrendName = state.marketTrendName || 'Stabil';
 };
 
+const migrateState = (draft: GameState) => {
+  draft.saveVersion = SAVE_VERSION;
+  if (!Array.isArray(draft.unlockedAchievements)) draft.unlockedAchievements = [];
+  if (typeof draft.concentrates !== 'number') draft.concentrates = 0;
+  if (!draft.marketTrendName) draft.marketTrendName = 'Stabil';
+  if (typeof draft.marketTrendMult !== 'number') draft.marketTrendMult = 1;
+  if (!Array.isArray(draft.priceHistory)) draft.priceHistory = [];
+  if (typeof draft.marketNewsMult !== 'number') draft.marketNewsMult = 1;
+  draft.soundFx = typeof draft.soundFx === 'boolean' ? draft.soundFx : true;
+  draft._achTimer = draft._achTimer || 0;
+};
+
 export const getAllStrains = (state: GameState) => STRAINS.concat(state.customStrains || []);
 
 export const getStrain = (state: GameState, id: string): Strain => {
@@ -240,6 +268,7 @@ export const hydrateState = (loaded?: Partial<GameState>): GameState => {
     draft.concentrates = typeof draft.concentrates === 'number' ? draft.concentrates : 0;
     ensureQuestState(draft as any);
     syncQuests(draft as any);
+    migrateState(draft as any);
     draft.applications = Array.isArray(draft.applications) ? draft.applications : [];
     draft.applications = draft.applications.map((a: any) => ({
       ...a,
@@ -838,6 +867,7 @@ export const tickState = (state: GameState, realSeconds: number): GameState => {
     draft.playtimeSec += Math.max(0, realSeconds);
     draft.lastTime = Date.now();
     syncQuests(draft as any);
+    draft._achTimer = (draft._achTimer || 0) + realSeconds;
     if (worldDt <= 0) return;
     draft.plants.forEach((p) => advancePlant(draft as any, p, worldDt));
     advanceGameTime(draft as any, worldDt);
@@ -888,11 +918,31 @@ export const tickState = (state: GameState, realSeconds: number): GameState => {
     if (draft.marketTimer > 0) draft.marketTimer = Math.max(0, draft.marketTimer - worldDt);
     if (draft.nextMarketEventIn > 0) draft.nextMarketEventIn = Math.max(0, draft.nextMarketEventIn - worldDt);
     if (draft.nextMarketEventIn === 0 && draft.marketTimer === 0) spawnMarketEvent(draft as any);
+    draft.marketNewsTimer = Math.max(0, (draft.marketNewsTimer || 0) - worldDt);
+    if (draft.marketNewsTimer === 0 && Math.random() < 0.01 * worldDt) {
+      const ev = MARKET_NEWS[Math.floor(Math.random() * MARKET_NEWS.length)];
+      draft.marketNews = ev.name;
+      draft.marketNewsMult = ev.mult;
+      draft.marketNewsTimer = ev.duration;
+      draft.marketMult *= ev.mult;
+      pushMessage(draft as any, ev.name, 'info');
+    }
+    if (draft.marketNewsTimer === 0 && draft.marketNewsMult !== 1) {
+      draft.marketMult = draft.marketMult / (draft.marketNewsMult || 1);
+      draft.marketNewsMult = 1;
+      draft.marketNews = '';
+    }
     const perSec = computePerSec(draft as any);
     draft.bestPerSec = Math.max(draft.bestPerSec, perSec);
   });
   if (worldDt > 0) {
     next = employeeActions(next, worldDt);
+  }
+  if ((next._achTimer || 0) >= 5) {
+    next = produce(next, (draft) => {
+      draft._achTimer = 0;
+      checkAchievements(draft as any);
+    });
   }
   next = advanceQuest(next);
   return next;
@@ -906,7 +956,7 @@ export const applyOfflineProgress = (state: GameState) => {
 };
 
 export const getSalePricePerGram = (state: GameState) => {
-  const base = BASE_PRICE_PER_G * (state.marketMult || 1);
+  const base = BASE_PRICE_PER_G * (state.marketMult || 1) * (state.marketNewsMult || 1);
   const mult = itemPriceMultiplier(state) * (state.marketTrendMult || 1);
   const avgQ = (state.qualityPool.grams || 0) > 0 ? state.qualityPool.weighted / state.qualityPool.grams : 1;
   const qMult = 1 + clamp(avgQ - 1, -0.6, 2);
@@ -1163,6 +1213,23 @@ const syncQuests = (state: GameState) => {
   });
   state.activeQuests = (state.quests || []).filter((q) => q.status !== 'claimed').map((q) => q.id);
   state.completedQuests = (state.quests || []).filter((q) => q.status === 'claimed').map((q) => q.id);
+};
+
+const checkAchievements = (state: GameState) => {
+  state.unlockedAchievements = state.unlockedAchievements || [];
+  let unlocked = false;
+  for (const ach of ACHIEVEMENTS) {
+    if (state.unlockedAchievements.includes(ach.id)) continue;
+    if (ach.condition(state)) {
+      state.unlockedAchievements.push(ach.id);
+      if (ach.reward.type === 'haze') {
+        state.hazePoints = (state.hazePoints || 0) + ach.reward.amount;
+      }
+      pushMessage(state, `🏆 Erfolg freigeschaltet: ${ach.title}`, 'success');
+      unlocked = true;
+    }
+  }
+  return unlocked;
 };
 
 const applyQuestRewards = (state: GameState, questId: string) => {
@@ -1733,6 +1800,8 @@ const marketDrift = (state: GameState, dt: number) => {
   state.marketTrendMult = trend.mult;
   state.marketTrend = trend.mult > 1 ? 'up' : trend.mult < 1 ? 'down' : 'stable';
   state.nextMarketShiftIn = 600; // alle 10 Minuten
+  const price = getSalePricePerGram(state);
+  state.priceHistory = (state.priceHistory || []).slice(-19).concat(price);
 };
 
 const spawnRandomEvent = (state: GameState) => {

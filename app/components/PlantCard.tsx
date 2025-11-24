@@ -8,6 +8,7 @@ import { GameState, Plant, Strain } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
 import { emitFloatingText } from './ui/FloatingTextLayer';
 import React from 'react';
+import { useSound } from '../hooks/useSound';
 
 type Props = {
   plant: Plant;
@@ -17,6 +18,7 @@ type Props = {
 };
 
 export function PlantCard({ plant, strain, state, actions }: Props) {
+  const harvestSound = useSound('/assets/audio/harvest.mp3', state.soundFx !== false);
   const growPct = Math.round((plant.growProg || 0) * 100);
   const waterPct = Math.round(((plant.water || 0) / WATER_MAX) * 100);
   const nutrientPct = Math.round(((plant.nutrients || 0) / NUTRIENT_MAX) * 100);
@@ -45,6 +47,7 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
     if (!ready) return;
     actions.harvestPlant(plant.slot);
     showFloat(`+${fmtNumber(wetYield)}g Nass`, e, 'gain');
+    harvestSound.play();
   };
 
   const handleWater = (e: React.MouseEvent) => {

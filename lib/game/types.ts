@@ -299,8 +299,10 @@ export interface CaseStats {
 }
 
 export interface GameState {
+  saveVersion?: number;
   grams: number;
   concentrates?: number;
+  priceHistory?: number[];
   totalEarned: number;
   bestPerSec: number;
   hazePoints: number;
@@ -338,6 +340,9 @@ export interface GameState {
   nextMarketShiftIn?: number;
   marketTrendMult?: number;
   marketTrendName?: string;
+  marketNews?: string;
+  marketNewsTimer?: number;
+  marketNewsMult?: number;
   marketTimer: number;
   marketEventName: string;
   research: Record<string, boolean>;
@@ -372,11 +377,14 @@ export interface GameState {
   quests?: QuestProgress[];
   activeQuests: string[];
   completedQuests: string[];
+  unlockedAchievements?: string[];
+  soundFx?: boolean;
   breedingSlots?: { parent1: string | null; parent2: string | null };
   favorites?: string[];
   bulkConserve?: boolean;
   staffEnergy?: Record<string, EmployeeState>;
   _empTimer?: number;
+  _achTimer?: number;
 }
 
 export interface EmployeeState {

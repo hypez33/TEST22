@@ -3224,6 +3224,7 @@ button:active{ transform: translateY(0) scale(.98) !important; box-shadow: inset
 
 .right-panel .quest-check{ width:12px; height:12px; font-size:10px }
 .right-panel .quest-step.ready{ border:1px solid rgba(40,255,138,0.6); box-shadow: 0 8px 22px rgba(40,255,138,0.18); }
+.right-panel .quest-step.locked{ opacity:0.6; filter: grayscale(0.7); }
 .quest-tasks{ display:flex; flex-direction:column; gap:6px; margin:6px 0 }
 .quest-task-head{ display:flex; align-items:center; justify-content:space-between; }
 .quest-rewards{ display:flex; gap:6px; flex-wrap:wrap; margin-top:6px }

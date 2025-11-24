@@ -25,6 +25,7 @@ export const questSchema = z.object({
 });
 
 export const gameStateSchema = z.object({
+  saveVersion: z.number().optional(),
   grams: z.number().optional(),
   concentrates: z.number().optional(),
   totalEarned: z.number().optional(),
@@ -37,6 +38,7 @@ export const gameStateSchema = z.object({
   quests: z.array(questSchema).optional(),
   completedQuests: z.array(z.string()).optional(),
   activeQuests: z.array(z.string()).optional(),
+  unlockedAchievements: z.array(z.string()).optional(),
   favorites: z.array(z.string()).optional(),
   bulkConserve: z.boolean().optional(),
   itemsOwned: z.record(z.any()).optional(),

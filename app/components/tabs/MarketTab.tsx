@@ -5,11 +5,13 @@ import { GameState } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
 import { getSalePricePerGram, getStrain } from '@/lib/game/engine';
 import { fmtNumber } from '@/lib/game/utils';
+import { useSound } from '../../hooks/useSound';
 
 type Props = { state: GameState; actions: GameActions };
 
 export function MarketTab({ state, actions }: Props) {
   const [buyer, setBuyer] = useState<'market' | 'street' | 'dispensary'>('market');
+  const cashSound = useSound('/assets/audio/cash.mp3', state.soundFx !== false);
   const pricePerG = getSalePricePerGram(state);
   const buyerMult = buyer === 'street' ? 0.85 : buyer === 'dispensary' ? 1.15 : 1;
   const sellMax = Math.max(0, state.grams * 0.5);
@@ -46,16 +48,27 @@ export function MarketTab({ state, actions }: Props) {
             </label>
           </div>
           <div className="market-actions">
-            <button className="secondary" onClick={() => actions.sellToBuyer(10, buyer)} disabled={state.grams < 10}>
+            <button className="secondary" onClick={() => { actions.sellToBuyer(10, buyer); cashSound.play(); }} disabled={state.grams < 10}>
               10 g verkaufen
             </button>
-            <button className="secondary" onClick={() => actions.sellToBuyer(100, buyer)} disabled={state.grams < 100}>
+            <button className="secondary" onClick={() => { actions.sellToBuyer(100, buyer); cashSound.play(); }} disabled={state.grams < 100}>
               100 g verkaufen
             </button>
-            <button className="accent" onClick={() => actions.sellToBuyer(sellMax, buyer)} disabled={state.grams <= 0}>
+            <button className="accent" onClick={() => { actions.sellToBuyer(sellMax, buyer); cashSound.play(); }} disabled={state.grams <= 0}>
               50% verkaufen
             </button>
           </div>
+          {state.priceHistory && state.priceHistory.length > 1 && (
+            <div className="market-chart" aria-label="Preisverlauf">
+              <Sparkline data={state.priceHistory} />
+            </div>
+          )}
+          {state.marketNews && (
+            <div className="market-news">
+              <span className="pill">{state.marketNews}</span>
+              {state.marketNewsTimer ? <span className="hint">{Math.round(state.marketNewsTimer)}s</span> : null}
+            </div>
+          )}
         </div>
       </div>
 
@@ -118,5 +131,21 @@ export function MarketTab({ state, actions }: Props) {
         </div>
       </div>
     </section>
+  );
+}
+
+function Sparkline({ data }: { data: number[] }) {
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+  const points = data.map((v, i) => {
+    const x = (i / Math.max(1, data.length - 1)) * 100;
+    const y = 100 - ((v - min) / range) * 100;
+    return `${x},${y}`;
+  });
+  return (
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="sparkline">
+      <polyline fill="none" stroke="var(--accent)" strokeWidth="2" points={points.join(' ')} />
+    </svg>
   );
 }

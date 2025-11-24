@@ -50,6 +50,7 @@ export default function Page() {
   const prevLevel = useRef(state.level);
   const prevReadyQuests = useRef<string[]>([]);
   const prevCompleted = useRef<string[]>([]);
+  const prevAchievements = useRef<string[]>([]);
 
   const gameClock = useMemo(() => formatGameClock(state), [state]);
 
@@ -69,6 +70,13 @@ export default function Page() {
       .filter((id) => !prevCompleted.current.includes(id))
       .forEach((id) => pushToast({ title: 'Quest abgeschlossen', message: id, type: 'success' }));
     prevCompleted.current = completed;
+    const unlocked = state.unlockedAchievements || [];
+    unlocked
+      .filter((id) => !prevAchievements.current.includes(id))
+      .forEach((id) => {
+        pushToast({ title: '🏆 Erfolg freigeschaltet', message: id, type: 'success' });
+      });
+    prevAchievements.current = unlocked;
   }, [state.level, state.quests, ready]);
 
   const renderTab = (id: string) => {

@@ -4,12 +4,13 @@ import { GameState } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
 import { useMemo, useState } from 'react';
 import { QUESTS } from '@/lib/game/quests';
+import { ACHIEVEMENTS } from '@/lib/game/achievements';
 import { fmtNumber } from '@/lib/game/utils';
 
 type Props = { state: GameState; actions: GameActions };
 
 export function RightPanel({ state, actions }: Props) {
-  const [tab, setTab] = useState<'quests' | 'news'>('quests');
+  const [tab, setTab] = useState<'quests' | 'news' | 'achievements'>('quests');
   const messages = useMemo(() => (state.messages || []).slice(-15).reverse(), [state.messages]);
   const activeEvents = state.activeEvents || [];
 
@@ -19,6 +20,9 @@ export function RightPanel({ state, actions }: Props) {
         <div className="panel-tabs">
           <button className={`panel-tab ${tab === 'quests' ? 'active' : ''}`} onClick={() => setTab('quests')}>
             Quests
+          </button>
+          <button className={`panel-tab ${tab === 'achievements' ? 'active' : ''}`} onClick={() => setTab('achievements')}>
+            Erfolge
           </button>
           <button
             className={`panel-tab ${tab === 'news' ? 'active' : ''}`}
@@ -35,6 +39,12 @@ export function RightPanel({ state, actions }: Props) {
             <div className="panel-section active">
               <h3>Quests</h3>
               <QuestPanel state={state} actions={actions} />
+            </div>
+          )}
+          {tab === 'achievements' && (
+            <div className="panel-section active">
+              <h3>🏆 Erfolge</h3>
+              <AchievementPanel state={state} />
             </div>
           )}
           {tab === 'news' && (
@@ -161,4 +171,31 @@ function renderReward(r: any) {
   if (r.consumable) return `${r.count || 1}x ${r.consumable}`;
   if (r.message) return String(r.message);
   return 'Belohnung';
+}
+
+function AchievementPanel({ state }: { state: GameState }) {
+  const unlocked = new Set(state.unlockedAchievements || []);
+  return (
+    <div className="quest-list">
+      {ACHIEVEMENTS.map((a) => {
+        const done = unlocked.has(a.id);
+        return (
+          <div key={a.id} className={`quest-step ${done ? 'ready' : 'locked'}`}>
+            <div className="label">
+              <div>
+                <div>
+                  <strong>{a.icon ? `${a.icon} ` : ''}{a.title}</strong>
+                </div>
+                <div className="quest-muted">{a.description}</div>
+                <div className="quest-rewards">
+                  <span className="pill">{a.reward.type === 'haze' ? `${a.reward.amount} Haze-Punkte` : 'Belohnung'}</span>
+                </div>
+              </div>
+              <span className="quest-muted">{done ? 'Freigeschaltet' : 'Gesperrt'}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
