@@ -86,6 +86,7 @@ export interface Consumables {
   fungicide: number;
   beneficials: number;
   pgr?: number;
+  coffee?: number;
 }
 
 export interface GlobalUpgrade {
@@ -316,7 +317,7 @@ export interface GameState {
   welcomeRewarded: boolean;
   sidebarCollapsed: boolean;
   customStrains: Strain[];
-  employees: Record<string, boolean>;
+  employees: Record<string, EmployeeState>;
   apothekenVertraege: Record<string, boolean>;
   apothekenOffers?: Array<any>;
   activeEvents: any[];
@@ -328,5 +329,15 @@ export interface GameState {
   inventorySort: string;
   questStep?: number;
   breedingSlots?: { parent1: string | null; parent2: string | null };
+  favorites?: string[];
+  bulkConserve?: boolean;
+  staffEnergy?: Record<string, EmployeeState>;
   _empTimer?: number;
+}
+
+export interface EmployeeState {
+  hired: boolean;
+  level: number;
+  energy: number;
+  resting?: boolean;
 }

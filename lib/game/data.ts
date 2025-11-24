@@ -118,6 +118,7 @@ export const GLOBAL_UPGRADES: GlobalUpgrade[] = [
   { id: 'nutrients', name: 'Naehrstoff-Booster', baseCost: 180, inc: 0.025, desc: 'Alle Pflanzen +2.5% je Stufe' },
   { id: 'climate', name: 'Klimasteuerung', baseCost: 420, inc: 0.03, desc: 'Alle Pflanzen +3% je Stufe' },
   { id: 'automation', name: 'Automatisierung', baseCost: 950, inc: 0.035, desc: 'Alle Pflanzen +3.5% je Stufe' },
+  { id: 'breakroom', name: 'Pausenraum', baseCost: 650, inc: 0, desc: 'Mitarbeiter regenerieren Energie im Pausenraum' },
   { id: 'resonance', name: 'Resonanz-Soundscapes', baseCost: 1600, inc: 0.03, desc: 'Frequenz-Tuning beschleunigt Wachstum (+3% je Stufe)' },
   { id: 'biophotonics', name: 'Biophotonik-Kuppeln', baseCost: 2600, inc: 0.035, desc: 'Spektrale Lichtkuppeln +3.5% je Stufe' },
   { id: 'hydroponics', name: 'Hydroponik-System', baseCost: 3800, inc: 0.04, desc: 'Hydroponik bringt +4% je Stufe' },
@@ -257,7 +258,8 @@ export const CONSUMABLE_PACKS: ConsumablePack[] = [
   { id: 'fungi_s', name: 'Fungizid S', icon: 'fi fi-sr-shield-plus', price: 11, desc: '1x gegen Schimmel', add: { fungicide: 1 } },
   { id: 'fungi_m', name: 'Fungizid M', icon: 'fi fi-sr-shield-plus', price: 30, desc: '3x gegen Schimmel', add: { fungicide: 3 } },
   { id: 'beneficial_s', name: 'Nuetzlinge S', icon: 'fi fi-sr-leaf', price: 14, desc: '1x biologische Abwehr', add: { beneficials: 1 } },
-  { id: 'beneficial_m', name: 'Nuetzlinge M', icon: 'fi fi-sr-leaf', price: 36, desc: '3x biologische Abwehr', add: { beneficials: 3 } }
+  { id: 'beneficial_m', name: 'Nuetzlinge M', icon: 'fi fi-sr-leaf', price: 36, desc: '3x biologische Abwehr', add: { beneficials: 3 } },
+  { id: 'coffee_premium', name: 'Premium-Kaffee', icon: 'fi fi-sr-coffee', price: 40, desc: 'Füllt Mitarbeiter-Energie sofort auf', add: { coffee: 3 } }
 ];
 
 export const JOBS: Job[] = [

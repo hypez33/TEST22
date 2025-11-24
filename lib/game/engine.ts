@@ -112,6 +112,7 @@ export const createInitialState = (): GameState => ({
   sidebarCollapsed: false,
   customStrains: [],
   employees: {},
+  staffEnergy: {},
   apothekenVertraege: {},
   activeEvents: [],
   cashRain: false,
@@ -121,20 +122,23 @@ export const createInitialState = (): GameState => ({
   inventoryFilter: 'all',
   inventorySort: 'name',
   questStep: 0,
+  favorites: [],
+  bulkConserve: false,
   breedingSlots: { parent1: null, parent2: null },
   _empTimer: 0
 });
 
 const ensureConsumables = (state: any): GameState => {
   const normalize = (source?: Partial<GameState['consumables']>) => {
-    const c = { water: 0, nutrient: 0, spray: 0, fungicide: 0, beneficials: 0, pgr: 0, ...(source || {}) };
+    const c = { water: 0, nutrient: 0, spray: 0, fungicide: 0, beneficials: 0, pgr: 0, coffee: 0, ...(source || {}) };
     return {
       water: Math.max(0, Math.floor(c.water || 0)),
       nutrient: Math.max(0, Math.floor(c.nutrient || 0)),
       spray: Math.max(0, Math.floor(c.spray || 0)),
       fungicide: Math.max(0, Math.floor(c.fungicide || 0)),
       beneficials: Math.max(0, Math.floor(c.beneficials || 0)),
-      pgr: Math.max(0, Math.floor(c.pgr || 0))
+      pgr: Math.max(0, Math.floor(c.pgr || 0)),
+      coffee: Math.max(0, Math.floor(c.coffee || 0))
     };
   };
   if (isDraft(state)) {
@@ -194,6 +198,8 @@ export const hydrateState = (loaded?: Partial<GameState>): GameState => {
     draft.upgrades = draft.upgrades || {};
     draft.purchasedCount = draft.purchasedCount || {};
     draft.cart = draft.cart || [];
+    draft.favorites = Array.isArray(draft.favorites) ? draft.favorites : [];
+    draft.bulkConserve = !!draft.bulkConserve;
     draft.applications = Array.isArray(draft.applications) ? draft.applications : [];
     draft.applications = draft.applications.map((a: any) => ({
       ...a,
@@ -213,6 +219,23 @@ export const hydrateState = (loaded?: Partial<GameState>): GameState => {
     draft.pestGlobalRate = typeof draft.pestGlobalRate === 'number' ? draft.pestGlobalRate : PEST_GLOBAL_RATE;
     draft.cashRain = !!draft.cashRain;
     draft.slotsUnlocked = Math.max(2, Math.min(draft.slotsUnlocked || 2, currentMaxSlots(draft as any)));
+    if (draft.employees) {
+      Object.keys(draft.employees).forEach((key) => {
+        const val = (draft.employees as any)[key];
+        if (val && typeof val === 'object' && (val as any).hired) {
+          (draft.employees as any)[key] = {
+            hired: true,
+            level: Math.max(1, Number((val as any).level) || 1),
+            energy: Math.min(100, Math.max(0, Number((val as any).energy) || 100)),
+            resting: !!(val as any).resting
+          };
+        } else {
+          delete (draft.employees as any)[key];
+        }
+      });
+    } else {
+      draft.employees = {};
+    }
   });
 };
 
@@ -1252,7 +1275,8 @@ export const treatPlant = (state: GameState, slotIndex: number) => {
 };
 
 export const bulkWater = (state: GameState) => {
-  const needy = state.plants.filter((p: any) => p.water < WATER_MAX * 0.6 && p.health > 0);
+  const threshold = state.bulkConserve ? 0.5 : 0.6;
+  const needy = state.plants.filter((p: any) => p.water < WATER_MAX * threshold && p.health > 0);
   if (needy.length === 0) return state;
   const maxAffordable = Math.floor((state.cash || 0) / WATER_COST);
   if (maxAffordable <= 0) return state;
@@ -1262,7 +1286,7 @@ export const bulkWater = (state: GameState) => {
     let watered = 0;
     for (const plant of draft.plants) {
       if (watered >= toWater) break;
-      if (plant.water < WATER_MAX * 0.6 && plant.health > 0 && budget >= WATER_COST) {
+      if (plant.water < WATER_MAX * threshold && plant.health > 0 && budget >= WATER_COST) {
         plant.water = Math.min(WATER_MAX, plant.water + WATER_ADD_AMOUNT);
         budget -= WATER_COST;
         watered += 1;
@@ -1274,13 +1298,14 @@ export const bulkWater = (state: GameState) => {
 
 export const bulkFeed = (state: GameState) => {
   const ensured = ensureConsumables(state);
-  const hungry = ensured.plants.filter((p: any) => p.nutrients < NUTRIENT_MAX * 0.65 && p.health > 0);
+  const threshold = ensured.bulkConserve ? 0.5 : 0.65;
+  const hungry = ensured.plants.filter((p: any) => p.nutrients < NUTRIENT_MAX * threshold && p.health > 0);
   if (hungry.length === 0 || ensured.consumables.nutrient <= 0) return ensured;
   return produce(ensured, (draft: any) => {
     let remaining = draft.consumables.nutrient;
     for (const plant of draft.plants) {
       if (remaining <= 0) break;
-      if (plant.nutrients < NUTRIENT_MAX * 0.65 && plant.health > 0) {
+      if (plant.nutrients < NUTRIENT_MAX * threshold && plant.health > 0) {
         plant.nutrients = Math.min(NUTRIENT_MAX, plant.nutrients + NUTRIENT_ADD_AMOUNT);
         plant.quality = clamp((plant.quality || 1) + 0.04, 0.4, 1.5);
         remaining -= 1;
@@ -1400,6 +1425,7 @@ const pack = CONSUMABLE_PACKS.find((p) => p.id === packId);
     draft.consumables.fungicide += pack.add.fungicide || 0;
     draft.consumables.beneficials += pack.add.beneficials || 0;
     draft.consumables.pgr = (draft.consumables.pgr || 0) + (pack.add.pgr || 0);
+    draft.consumables.coffee = (draft.consumables.coffee || 0) + (pack.add.coffee || 0);
   });
 };
 
@@ -1498,6 +1524,11 @@ export const toggleTheme = (state: GameState, theme: 'light' | 'dark') => produc
   draft.theme = theme;
 });
 
+export const setBulkConserve = (state: GameState, on: boolean) =>
+  produce(state, (draft) => {
+    draft.bulkConserve = on;
+  });
+
 export const toggleDisplayPrefs = (state: GameState, { compact, contrast }: { compact?: boolean; contrast?: boolean }) =>
   produce(state, (draft) => {
     if (typeof compact === 'boolean') draft.compactMode = compact;
@@ -1518,6 +1549,14 @@ export const setInventoryFilters = (state: GameState, filter: string, sort: stri
   produce(state, (draft) => {
     draft.inventoryFilter = filter;
     draft.inventorySort = sort;
+  });
+
+export const toggleFavoriteStrain = (state: GameState, strainId: string) =>
+  produce(state, (draft) => {
+    draft.favorites = draft.favorites || [];
+    const idx = draft.favorites.indexOf(strainId);
+    if (idx >= 0) draft.favorites.splice(idx, 1);
+    else draft.favorites.unshift(strainId);
   });
 
 const pushMessage = (state: GameState, text: string, type = 'info') => {
@@ -1617,6 +1656,7 @@ export const checkoutCart = (state: GameState) => {
           draft.consumables.fungicide += pack.add.fungicide || 0;
           draft.consumables.beneficials += pack.add.beneficials || 0;
           draft.consumables.pgr = (draft.consumables.pgr || 0) + (pack.add.pgr || 0);
+          draft.consumables.coffee = (draft.consumables.coffee || 0) + (pack.add.coffee || 0);
         }
       }
     }
@@ -1708,19 +1748,19 @@ export const hireEmployee = (state: GameState, id: string) => {
   if (state.cash < emp.salary) return state;
   return produce(state, (draft) => {
     draft.cash -= emp.salary;
-    draft.employees[id] = { hired: true, level: 1 } as any;
+    draft.employees[id] = { hired: true, level: 1, energy: 100, resting: false };
   });
 };
 
 export const upgradeEmployee = (state: GameState, id: string) => {
   const emp = EMPLOYEES.find((e) => e.id === id);
   if (!emp || !state.employees[id]) return state;
-  const level = (state.employees[id] as any).level || 1;
+  const level = state.employees[id].level || 1;
   const cost = Math.round(emp.salary * level * 2);
   if (state.grams < cost) return state;
   return produce(state, (draft) => {
     draft.grams -= cost;
-    (draft.employees[id] as any).level = level + 1;
+    draft.employees[id].level = level + 1;
   });
 };
 
@@ -1734,10 +1774,40 @@ const employeeActions = (state: GameState, dt: number) => {
     draft._empTimer = (draft._empTimer || 0) + dt;
     if ((draft._empTimer || 0) < 5) return;
     draft._empTimer = 0;
+    const breakroomLevel = draft.upgrades?.['breakroom'] || 0;
     for (const emp of EMPLOYEES) {
-      if (!draft.employees[emp.id]) continue;
+      const data = draft.employees[emp.id];
+      if (!data) continue;
+      data.energy = typeof data.energy === 'number' ? data.energy : 100;
+      const level = data.level || 1;
+
+      if (data.resting) {
+        if ((draft.consumables.coffee || 0) > 0) {
+          draft.consumables.coffee -= 1;
+          data.energy = 100;
+          data.resting = false;
+          continue;
+        }
+        const regen = 6 * (1 + 0.5 * breakroomLevel);
+        data.energy = Math.min(100, data.energy + regen);
+        if (data.energy >= 80) data.resting = false;
+        continue;
+      }
+
       for (const task of emp.tasks) {
-        performEmployeeTask(draft as any, task);
+        if (data.energy <= 0) {
+          data.resting = true;
+          break;
+        }
+        const didWork = performEmployeeTask(draft as any, task);
+        if (didWork) {
+          const cost = Math.max(4, 8 - level);
+          data.energy = Math.max(0, data.energy - cost);
+        }
+        if (data.energy <= 5) {
+          data.resting = true;
+          break;
+        }
       }
     }
   });
@@ -1746,7 +1816,7 @@ const employeeActions = (state: GameState, dt: number) => {
 
 const performEmployeeTask = (state: GameState, task: string) => {
   const plants = state.plants.filter((p) => p.health > 0);
-  if (plants.length === 0) return;
+  if (plants.length === 0) return false;
   const plant = plants[Math.floor(Math.random() * plants.length)];
   const slot = plant.slot;
   let empLevel = 1;
@@ -1761,6 +1831,7 @@ const performEmployeeTask = (state: GameState, task: string) => {
     if (plant.water < WATER_MAX * 0.5 && (state.cash || 0) >= WATER_COST) {
       state.cash = Math.max(0, (state.cash || 0) - WATER_COST);
       plant.water = Math.min(WATER_MAX, plant.water + WATER_ADD_AMOUNT * 0.5 * efficiency);
+      return true;
     }
   } else if (task === 'feed') {
     ensureConsumables(state);
@@ -1768,6 +1839,7 @@ const performEmployeeTask = (state: GameState, task: string) => {
       state.consumables.nutrient -= 1;
       plant.nutrients = Math.min(NUTRIENT_MAX, plant.nutrients + NUTRIENT_ADD_AMOUNT * efficiency);
       plant.quality = clamp(plant.quality + 0.02 * efficiency, 0.4, 1.5);
+      return true;
     }
   } else if (task === 'harvest') {
     if (plant.growProg >= 1 && (state.itemsOwned['shears'] || 0) > 0) {
@@ -1778,14 +1850,17 @@ const performEmployeeTask = (state: GameState, task: string) => {
       state.qualityPool.grams = (state.qualityPool.grams || 0) + gain;
       state.qualityPool.weighted = (state.qualityPool.weighted || 0) + gain * q;
       state.plants = state.plants.filter((p) => p.slot !== slot);
+      return true;
     }
   } else if (task === 'treat') {
     ensureConsumables(state);
     if (plant.pest && state.consumables.spray > 0) {
       state.consumables.spray -= 1;
       plant.pest = null;
+      return true;
     }
   }
+  return false;
 };
 
 const calculateHybridProfile = (p1: Strain, p2: Strain, randomFn = Math.random) => {

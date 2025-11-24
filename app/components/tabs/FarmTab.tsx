@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { PlantCard } from '../PlantCard';
 import { GameState } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
@@ -18,6 +19,7 @@ export function FarmTab({ state, perSec, actions }: Props) {
   const unlocked = Math.max(0, state.slotsUnlocked || 0);
   const slots = Array.from({ length: slotMax }, (_, i) => i);
   const seedsAvailable = Object.entries(state.seeds || {}).filter(([, count]) => count > 0);
+  const [seedSort, setSeedSort] = useState<'rarity' | 'qty' | 'name'>('rarity');
 
   return (
     <section id="tab-farm" className="tab active">
@@ -53,6 +55,14 @@ export function FarmTab({ state, perSec, actions }: Props) {
               <button className="accent" type="button" onClick={actions.harvestAllReady}>
                 <i className="fi fi-sr-scissors"></i> Alle reifen ernten
               </button>
+              <label className="chip small">
+                <input
+                  type="checkbox"
+                  checked={!!state.bulkConserve}
+                  onChange={(e) => actions.toggleBulkConserve?.(e.target.checked)}
+                />{' '}
+                Nur unter 50% versorgen
+              </label>
             </div>
           </div>
         </div>
@@ -101,7 +111,15 @@ export function FarmTab({ state, perSec, actions }: Props) {
                           Keine Samen • Shop öffnen
                         </button>
                       ) : (
-                        <SeedSelect seedsAvailable={seedsAvailable} strains={strains} onPlant={(strainId) => actions.plantSeed(i, strainId)} />
+                        <SeedSelect
+                          seedsAvailable={seedsAvailable}
+                          strains={strains}
+                          onPlant={(strainId) => actions.plantSeed(i, strainId)}
+                          favorites={state.favorites || []}
+                          onToggleFavorite={(id) => actions.toggleFavorite?.(id)}
+                          sort={seedSort}
+                          onSortChange={setSeedSort}
+                        />
                       )}
                     </div>
                   </div>
@@ -117,30 +135,66 @@ export function FarmTab({ state, perSec, actions }: Props) {
 
 type SeedSelectProps = {
   seedsAvailable: [string, number][];
-  strains: { id: string; name: string }[];
+  strains: { id: string; name: string; rarity?: string }[];
+  favorites: string[];
+  sort: 'rarity' | 'qty' | 'name';
+  onSortChange: (s: 'rarity' | 'qty' | 'name') => void;
   onPlant: (id: string) => void;
+  onToggleFavorite?: (id: string) => void;
 };
 
-function SeedSelect({ seedsAvailable, strains, onPlant }: SeedSelectProps) {
-  const [firstId] = seedsAvailable[0];
+function SeedSelect({ seedsAvailable, strains, favorites, sort, onSortChange, onPlant, onToggleFavorite }: SeedSelectProps) {
+  if (seedsAvailable.length === 0) return null;
+  const rarityOrder = ['legendary', 'epic', 'rare', 'uncommon', 'common'];
+  const sorted = [...seedsAvailable].sort(([idA, qtyA], [idB, qtyB]) => {
+    const favA = favorites.includes(idA) ? 1 : 0;
+    const favB = favorites.includes(idB) ? 1 : 0;
+    if (favA !== favB) return favB - favA; // favorites first
+    if (sort === 'qty') return qtyB - qtyA;
+    if (sort === 'rarity') {
+      const ra = rarityOrder.indexOf((strains.find((s) => s.id === idA)?.rarity as string) || '');
+      const rb = rarityOrder.indexOf((strains.find((s) => s.id === idB)?.rarity as string) || '');
+      return (ra === -1 ? 99 : ra) - (rb === -1 ? 99 : rb);
+    }
+    const nameA = strains.find((s) => s.id === idA)?.name || idA;
+    const nameB = strains.find((s) => s.id === idB)?.name || idB;
+    return nameA.localeCompare(nameB);
+  });
+
   return (
     <div className="seed-select-inline">
-      <select onChange={(e) => onPlant(e.target.value)} defaultValue="">
-        <option value="" disabled>
-          Samen wählen
-        </option>
-        {seedsAvailable.map(([id, count]) => {
+      <div className="seed-sorter">
+        <label>
+          Sortieren nach:{' '}
+          <select value={sort} onChange={(e) => onSortChange(e.target.value as SeedSelectProps['sort'])}>
+            <option value="rarity">Rarität</option>
+            <option value="qty">Menge</option>
+            <option value="name">Name</option>
+          </select>
+        </label>
+      </div>
+      <div className="seed-list">
+        {sorted.map(([id, qty]) => {
           const strain = strains.find((s) => s.id === id);
+          const fav = favorites.includes(id);
           return (
-            <option key={id} value={id}>
-              {strain?.name || id} ({count})
-            </option>
+            <div key={id} className="seed-row">
+              <button className={`fav-btn ${fav ? 'active' : ''}`} type="button" onClick={() => onToggleFavorite?.(id)} aria-label="Favorisieren">
+                {fav ? '★' : '☆'}
+              </button>
+              <div className="seed-info">
+                <div className="seed-name">
+                  {strain?.name || id} <span className="pill muted">{strain?.rarity || '—'}</span>
+                </div>
+                <div className="seed-meta">Menge: {qty}</div>
+              </div>
+              <button className="accent" type="button" onClick={() => onPlant(id)}>
+                Pflanzen
+              </button>
+            </div>
           );
         })}
-      </select>
-      <button className="accent" type="button" onClick={() => onPlant(firstId)}>
-        Pflanzen
-      </button>
+      </div>
     </div>
   );
 }

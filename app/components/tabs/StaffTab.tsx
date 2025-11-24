@@ -22,6 +22,8 @@ export function StaffTab({ state, actions }: Props) {
             const level = data.level || 1;
             const upgradeCost = Math.round(emp.salary * level * 2);
             const eligible = state.level >= (emp.reqLevel || 1);
+            const energy = Math.round(data.energy ?? 0);
+            const resting = !!data.resting;
             return (
               <div key={emp.id} className="employee-card">
                 <div className="employee-info">
@@ -32,6 +34,14 @@ export function StaffTab({ state, actions }: Props) {
                   <div className="employee-details">
                     Gehalt: {fmtNumber(emp.salary)}/Monat · Aufgaben: {emp.tasks.join(', ')}
                   </div>
+                  {hired && (
+                    <div className="employee-energy">
+                      <div className="bar-label">Energie {energy}% {resting ? '· Pause' : ''}</div>
+                      <div className="progress">
+                        <div className="progress-bar" style={{ width: `${Math.min(100, Math.max(0, energy))}%` }} />
+                      </div>
+                    </div>
+                  )}
                   <div className="employee-actions">
                     {!hired ? (
                       <button className="secondary" onClick={() => actions.hireEmployee(emp.id)} disabled={!eligible || state.cash < emp.salary}>
