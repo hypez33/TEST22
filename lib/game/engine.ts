@@ -272,15 +272,18 @@ export const createPlant = (strainId: string, slot: number): Plant => ({
   pest: null
 });
 
-export const ensurePlantDefaults = (plant: Plant) => {
-  plant.level = typeof plant.level === 'number' ? plant.level : 1;
-  plant.growProg = clamp(typeof plant.growProg === 'number' ? plant.growProg : 0, 0, 1);
-  plant.water = clamp(typeof plant.water === 'number' ? plant.water : WATER_START, 0, WATER_MAX);
-  plant.nutrients = clamp(typeof plant.nutrients === 'number' ? plant.nutrients : NUTRIENT_START, 0, NUTRIENT_MAX);
-  plant.health = clamp(typeof plant.health === 'number' ? plant.health : 100, 0, 100);
-  plant.quality = clamp(typeof plant.quality === 'number' ? plant.quality : 1, 0.4, 1.5);
-  plant.readyTime = typeof plant.readyTime === 'number' ? plant.readyTime : 0;
-  plant.pest = plant.pest || null;
+export const ensurePlantDefaults = (plant: Plant): Plant => {
+  const mutable = isDraft(plant) || !Object.isFrozen(plant);
+  const target = mutable ? plant : { ...plant };
+  target.level = typeof target.level === 'number' ? target.level : 1;
+  target.growProg = clamp(typeof target.growProg === 'number' ? target.growProg : 0, 0, 1);
+  target.water = clamp(typeof target.water === 'number' ? target.water : WATER_START, 0, WATER_MAX);
+  target.nutrients = clamp(typeof target.nutrients === 'number' ? target.nutrients : NUTRIENT_START, 0, NUTRIENT_MAX);
+  target.health = clamp(typeof target.health === 'number' ? target.health : 100, 0, 100);
+  target.quality = clamp(typeof target.quality === 'number' ? target.quality : 1, 0.4, 1.5);
+  target.readyTime = typeof target.readyTime === 'number' ? target.readyTime : 0;
+  target.pest = target.pest || null;
+  return target;
 };
 
 export const growTimeFor = (state: GameState, plant: Plant) => {
@@ -346,12 +349,12 @@ const getTimeSpeed = (state: GameState) => {
 
 export const computePerSec = (state: GameState) => {
   const base = state.plants.reduce((sum, plant) => {
-    ensurePlantDefaults(plant);
-    if (plant.growProg >= 1 || plant.health <= 0) return sum;
-    const slow = plant.water <= 0 || plant.nutrients <= 0 ? 0.25 : 1;
+    const p = ensurePlantDefaults(plant);
+    if (p.growProg >= 1 || p.health <= 0) return sum;
+    const slow = p.water <= 0 || p.nutrients <= 0 ? 0.25 : 1;
     const d = DIFFICULTIES[state.difficulty] || DIFFICULTIES.normal;
-    const effTime = growTimeFor(state, plant) / (d.growth || 1);
-    return sum + ((harvestYieldFor(state, plant) * qualityMultiplier(state, plant)) / effTime) * slow;
+    const effTime = growTimeFor(state, p) / (d.growth || 1);
+    return sum + ((harvestYieldFor(state, p) * qualityMultiplier(state, p)) / effTime) * slow;
   }, 0);
   return base * getTimeSpeed(state);
 };

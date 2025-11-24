@@ -28,6 +28,14 @@ export function ShopTab({ state, actions }: Props) {
     setCartOpen(true);
   };
 
+  const addMaxToCart = (id: string, price: number, name: string, kind: 'seed' | 'item' | 'consumable', stackable = true) => {
+    if (price <= 0) return;
+    let maxQty = Math.floor(state.cash / price);
+    if (!stackable) maxQty = Math.min(1, maxQty);
+    if (maxQty <= 0) return;
+    addToCart(id, maxQty, price, name, kind);
+  };
+
   return (
     <section id="tab-trade" className="tab">
       <div className="panel">
@@ -55,8 +63,9 @@ export function ShopTab({ state, actions }: Props) {
                 const price = seedCost(state, strain.id);
                 const count = state.seeds[strain.id] || 0;
                 const purchased = state.purchasedCount[strain.id] || 0;
+                const disabled = state.cash < price;
                 return (
-                  <div key={strain.id} className="shop-item">
+                  <div key={strain.id} className={`shop-item ${disabled ? 'disabled' : ''}`}>
                     <div className="shop-item-left">
                       <div className="shop-item-name">
                         {strain.name} <span className="pill muted">{strain.rarity}</span>
@@ -73,6 +82,9 @@ export function ShopTab({ state, actions }: Props) {
                       <div className="shop-item-actions">
                         <button className="accent" type="button" onClick={() => actions.buySeed(strain.id)} disabled={state.cash < price}>
                           Sofort
+                        </button>
+                        <button className="secondary" type="button" onClick={() => addMaxToCart(strain.id, price, strain.name, 'seed')}>
+                          Max
                         </button>
                         <button className="ghost" type="button" onClick={() => addToCart(strain.id, 1, price, strain.name, 'seed')}>
                           In den Warenkorb
@@ -92,8 +104,9 @@ export function ShopTab({ state, actions }: Props) {
                 const price = itemCost(state, item.id);
                 const inCart = cartCount(item.id, 'item');
                 const limitReached = !item.stack && (owned + inCart) >= 1;
+                const disabled = state.cash < price || limitReached;
                 return (
-                  <div key={item.id} className="shop-item">
+                  <div key={item.id} className={`shop-item ${disabled ? 'disabled' : ''}`}>
                     <div className="shop-item-left">
                       <div className="shop-item-name">
                         {item.name} <span className="pill muted">{item.category}</span>
@@ -111,6 +124,11 @@ export function ShopTab({ state, actions }: Props) {
                         <button className="secondary" type="button" onClick={() => actions.buyItem(item.id)} disabled={state.cash < price || limitReached}>
                           {limitReached ? 'Bereits vorhanden' : 'Kaufen'}
                         </button>
+                        {item.stack && (
+                          <button className="secondary" type="button" onClick={() => addMaxToCart(item.id, price, item.name, 'item', !!item.stack)} disabled={disabled}>
+                            Max
+                          </button>
+                        )}
                         <button className="ghost" type="button" onClick={() => addToCart(item.id, 1, price, item.name, 'item')} disabled={limitReached}>
                           In den Warenkorb
                         </button>
@@ -124,8 +142,10 @@ export function ShopTab({ state, actions }: Props) {
 
           {tab === 'consumables' && (
             <div className="shop-category active">
-              {CONSUMABLE_PACKS.map((pack) => (
-                <div key={pack.id} className="shop-item">
+              {CONSUMABLE_PACKS.map((pack) => {
+                const disabled = state.cash < pack.price;
+                return (
+                <div key={pack.id} className={`shop-item ${disabled ? 'disabled' : ''}`}>
                   <div className="shop-item-left">
                     <div className="shop-item-name">{pack.name}</div>
                     <div className="shop-item-desc">{pack.desc}</div>
@@ -137,8 +157,11 @@ export function ShopTab({ state, actions }: Props) {
                       </span>
                     </div>
                     <div className="shop-item-actions">
-                      <button className="secondary" type="button" onClick={() => actions.buyPack(pack.id)} disabled={state.cash < pack.price}>
+                      <button className="secondary" type="button" onClick={() => actions.buyPack(pack.id)} disabled={disabled}>
                         Kaufen
+                      </button>
+                      <button className="secondary" type="button" onClick={() => addMaxToCart(pack.id, pack.price, pack.name, 'consumable')} disabled={disabled}>
+                        Max
                       </button>
                       <button className="ghost" type="button" onClick={() => addToCart(pack.id, 1, pack.price, pack.name, 'consumable')}>
                         In den Warenkorb
@@ -146,7 +169,7 @@ export function ShopTab({ state, actions }: Props) {
                     </div>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </div>

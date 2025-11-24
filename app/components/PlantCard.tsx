@@ -23,7 +23,7 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
   const ready = plant.growProg >= 1;
 
   return (
-    <div className="plant-card" data-slot={plant.slot}>
+    <div className={`plant-card ${ready ? 'plant-card-ready' : ''}`} data-slot={plant.slot}>
       <div className="plant-header">
         <div className="plant-left">
           <div className="plant-icon">{strain.tag || '🌿'}</div>
