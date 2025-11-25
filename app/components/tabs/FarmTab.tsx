@@ -6,6 +6,7 @@ import { GameState } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
 import { currentMaxSlots, getAllStrains } from '@/lib/game/engine';
 import { fmtNumber } from '@/lib/game/utils';
+import { EMPLOYEES } from '@/lib/game/data';
 
 type Props = {
   state: GameState;
@@ -23,7 +24,7 @@ export function FarmTab({ state, perSec, actions }: Props) {
 
   return (
     <section id="tab-farm" className="tab active">
-      <div className="row summary">
+      <div className="row summary wide">
         <div className="summary-item">
           <div className="label">Lager (trocken)</div>
           <div className="value">{fmtNumber(state.grams)} g</div>
@@ -41,11 +42,11 @@ export function FarmTab({ state, perSec, actions }: Props) {
       <div className="panel">
         <div className="panel-header">
           <h2>🌿 Grow Room</h2>
-          <div className="grow-controls">
-            <span className="hint">
-              Plätze: <span>{unlocked}</span>/<span>{slotMax}</span> * Erweitere deinen Raum im Tab Immobilien
-            </span>
-            <div className="grow-actions">
+        <div className="grow-controls">
+          <span className="hint">
+            Plätze: <span>{unlocked}</span>/<span>{slotMax}</span> * Erweitere deinen Raum im Tab Immobilien
+          </span>
+          <div className="grow-actions">
               <button className="ghost" type="button" onClick={actions.bulkWater}>
                 <i className="fi fi-sr-raindrops"></i> Durstige gießen
               </button>
@@ -66,67 +67,104 @@ export function FarmTab({ state, perSec, actions }: Props) {
             </div>
           </div>
         </div>
-        <div className="slots">
-          {slots.map((i) => {
-            const plant = state.plants.find((p) => p.slot === i);
-            if (plant) {
-              const strain = strains.find((s) => s.id === plant.strainId) || strains[0];
+        <div className="farm-grid">
+          <div className="slots">
+            {slots.map((i) => {
+              const plant = state.plants.find((p) => p.slot === i);
+              if (plant) {
+                const strain = strains.find((s) => s.id === plant.strainId) || strains[0];
+                return (
+                  <div key={i} className="slot slot-has-plant" data-slot={i}>
+                    <PlantCard plant={plant} strain={strain} state={state} actions={actions} />
+                  </div>
+                );
+              }
+              const locked = i >= unlocked;
+              if (locked) {
+                return (
+                  <div key={i} className="slot slot-locked" data-slot={i}>
+                    <div className="slot-empty-card locked-card">
+                      <div className="slot-empty-content">
+                        <div className="slot-empty-title">Slot gesperrt</div>
+                        <p className="slot-empty-text">Erhöhe deine Slots oder erweitere den Raum.</p>
+                        <div className="slot-empty-actions">
+                          <button className="ghost" type="button" onClick={actions.unlockSlot}>
+                            Freischalten
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
-                <div key={i} className="slot slot-has-plant" data-slot={i}>
-                  <PlantCard plant={plant} strain={strain} state={state} actions={actions} />
-                </div>
-              );
-            }
-            const locked = i >= unlocked;
-            if (locked) {
-              return (
-                <div key={i} className="slot slot-locked" data-slot={i}>
-                  <div className="slot-empty-card locked-card">
+                <div key={i} className="slot slot-empty" data-slot={i}>
+                  <div className="slot-empty-card">
+                    <div className="slot-empty-icon">
+                      <i className="fi fi-rr-seedling"></i>
+                    </div>
                     <div className="slot-empty-content">
-                      <div className="slot-empty-title">Slot gesperrt</div>
-                      <p className="slot-empty-text">Erhöhe deine Slots oder erweitere den Raum.</p>
+                      <div className="slot-empty-title">Slot {i + 1}</div>
+                      <p className="slot-empty-text">Setze eine neue Sorte.</p>
                       <div className="slot-empty-actions">
-                        <button className="ghost" type="button" onClick={actions.unlockSlot}>
-                          Freischalten
-                        </button>
+                        {seedsAvailable.length === 0 ? (
+                          <button className="ghost" type="button" onClick={() => actions.buySeed(strains[0].id)}>
+                            Keine Samen • Shop öffnen
+                          </button>
+                        ) : (
+                          <SeedSelect
+                            seedsAvailable={seedsAvailable}
+                            strains={strains}
+                            onPlant={(strainId) => actions.plantSeed(i, strainId)}
+                            favorites={state.favorites || []}
+                            onToggleFavorite={(id) => actions.toggleFavorite?.(id)}
+                            sort={seedSort}
+                            onSortChange={setSeedSort}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
               );
-            }
+            })}
+          </div>
 
-            return (
-              <div key={i} className="slot slot-empty" data-slot={i}>
-                <div className="slot-empty-card">
-                  <div className="slot-empty-icon">
-                    <i className="fi fi-rr-seedling"></i>
-                  </div>
-                  <div className="slot-empty-content">
-                    <div className="slot-empty-title">Slot {i + 1}</div>
-                    <p className="slot-empty-text">Setze eine neue Sorte.</p>
-                    <div className="slot-empty-actions">
-                      {seedsAvailable.length === 0 ? (
-                        <button className="ghost" type="button" onClick={() => actions.buySeed(strains[0].id)}>
-                          Keine Samen • Shop öffnen
-                        </button>
-                      ) : (
-                        <SeedSelect
-                          seedsAvailable={seedsAvailable}
-                          strains={strains}
-                          onPlant={(strainId) => actions.plantSeed(i, strainId)}
-                          favorites={state.favorites || []}
-                          onToggleFavorite={(id) => actions.toggleFavorite?.(id)}
-                          sort={seedSort}
-                          onSortChange={setSeedSort}
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
+          <aside className="farm-staff">
+            <div className="panel mini-panel">
+              <div className="panel-header">
+                <h4><i className="fi fi-sr-users" aria-hidden="true"></i> Mitarbeiter-Status</h4>
               </div>
-            );
-          })}
+              <div className="employee-mini-list">
+                {EMPLOYEES.filter((e) => state.employees?.[e.id]?.hired).length === 0 && (
+                  <div className="placeholder small">Kein Mitarbeiter aktiv.</div>
+                )}
+                {EMPLOYEES.filter((e) => state.employees?.[e.id]?.hired).map((emp) => {
+                  const data = state.employees[emp.id] || {};
+                  const energy = Math.round(data.energy || 0);
+                  const resting = !!data.resting;
+                  const icon = energy > 66 ? '🔋' : energy > 33 ? '🔋' : '🪫';
+                  return (
+                    <div key={emp.id} className="employee-mini-card">
+                      <div className="mini-head">
+                        <div className="mini-name">{emp.name} <span className="mini-level">Lv.{data.level || 1}</span></div>
+                        <div className={`mini-state ${resting ? 'resting' : 'active'}`}>{resting ? 'Pause' : 'Aktiv'}</div>
+                      </div>
+                      <div className="mini-tasks">{emp.tasks.join(', ')}</div>
+                      <div className="mini-energy">
+                        <span className="mini-icon">{icon}</span>
+                        <div className="progress">
+                          <div className="progress-bar" style={{ width: `${Math.min(100, Math.max(0, energy))}%` }} />
+                        </div>
+                        <span className="mini-energy-text">{energy}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
     </section>

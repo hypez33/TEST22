@@ -320,11 +320,12 @@ export const hydrateState = (loaded?: Partial<GameState>): GameState => {
     draft.pestGlobalRate = typeof draft.pestGlobalRate === 'number' ? draft.pestGlobalRate : PEST_GLOBAL_RATE;
     draft.cashRain = !!draft.cashRain;
     draft.slotsUnlocked = Math.max(2, Math.min(draft.slotsUnlocked || 2, currentMaxSlots(draft as any)));
-    if (draft.employees?.grower && !draft.employees?.growhelper) {
-      draft.employees.growhelper = { ...(draft.employees as any).grower };
-      delete (draft.employees as any).grower;
-    }
     if (draft.employees) {
+      draft.employees = { ...(draft.employees as any) }; // ensure writable copy
+      if ((draft.employees as any).grower && !(draft.employees as any).growhelper) {
+        (draft.employees as any).growhelper = { ...(draft.employees as any).grower };
+        delete (draft.employees as any).grower;
+      }
       Object.keys(draft.employees).forEach((key) => {
         const val = (draft.employees as any)[key];
         if (val && typeof val === 'object' && (val as any).hired) {

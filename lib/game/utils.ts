@@ -4,11 +4,15 @@ export const clamp = (n: number, min: number, max: number) => Math.max(min, Math
 
 export const fmtNumber = (n: number) => {
   if (!Number.isFinite(n)) return '0';
-  if (n >= 1e12) return (n / 1e12).toFixed(2) + 'T';
-  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
-  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
-  if (n >= 1e3) return (n / 1e3).toFixed(2) + 'k';
-  return n.toFixed(2);
+  if (Math.abs(n) >= 1e6) {
+    const m = (n / 1e6).toFixed(2);
+    return `${parseFloat(m)}m`;
+  }
+  const opts: Intl.NumberFormatOptions = {
+    minimumFractionDigits: Math.abs(n) < 1000 ? 2 : 0,
+    maximumFractionDigits: Math.abs(n) < 1000 ? 2 : 0
+  };
+  return Number(n).toLocaleString('de-DE', opts);
 };
 
 export const formatMoney = (amount: number) => {
