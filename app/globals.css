@@ -4661,6 +4661,23 @@ body.high-contrast .shop-item.is-locked{opacity:0.85;}
 .yield-tip-row span:last-child{ font-weight:700; }
 .yield-tip-cap{ font-size:11px; color: var(--muted); }
 
+.trait-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:2px 8px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.05);
+  font-size:11px;
+}
+.trait-badge.negative{
+  border-color: rgba(248,113,113,0.5);
+  color:#f87171;
+}
+.hybrid-preview-traits .trait-badge{ margin-right:6px; margin-top:6px; }
+.plant-traits{ display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+
 .market-header{
   display:flex;
   align-items:center;

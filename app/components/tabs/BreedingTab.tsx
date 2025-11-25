@@ -4,6 +4,7 @@ import { GameState } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
 import { getAllStrains } from '@/lib/game/engine';
 import { fmtNumber } from '@/lib/game/utils';
+import { POSSIBLE_TRAITS } from '@/lib/game/data';
 
 interface Props {
   state: GameState;
@@ -24,6 +25,16 @@ export function BreedingTab({ state, actions }: Props) {
           quality: (strainA.quality + strainB.quality) / 2
         }
       : null;
+  const possibleTraits = () => {
+    if (!strainA || !strainB) return [];
+    const set = new Map<string, any>();
+    [...(strainA.traits || []), ...(strainB.traits || [])].forEach((t) => set.set(t.id, t));
+    if (set.size === 0) {
+      // fallback: zeige mögliche aus Pool
+      Object.values(POSSIBLE_TRAITS).slice(0, 3).forEach((t) => set.set(t.id, t));
+    }
+    return Array.from(set.values());
+  };
 
   const renderSlot = (parent: 1 | 2) => {
     const selected = slots[parent === 1 ? 'parent1' : 'parent2'];
@@ -91,6 +102,16 @@ export function BreedingTab({ state, actions }: Props) {
                         <span>Ø Qualität: {avgStats.quality.toFixed(2)}</span>
                       </div>
                     )}
+                    <div className="hybrid-preview-traits">
+                      <div className="label">Mögliche Traits:</div>
+                      <div className="trait-list">
+                        {possibleTraits().map((t) => (
+                          <span key={t.id} className={`trait-badge ${t.isNegative ? 'negative' : ''}`}>
+                            {t.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   'Kreuze zwei Sorten'

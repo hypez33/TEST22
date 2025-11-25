@@ -17,6 +17,17 @@ export interface Strain {
   base?: string;
   stages?: string[];
   generation?: number;
+  traits?: StrainTrait[];
+}
+
+export type TraitType = 'yield' | 'growth' | 'water' | 'pest' | 'quality' | 'price';
+export interface StrainTrait {
+  id: string;
+  name: string;
+  type: TraitType;
+  value: number;
+  desc: string;
+  isNegative?: boolean;
 }
 
 export interface PlantPest {

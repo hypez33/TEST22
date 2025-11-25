@@ -38,6 +38,7 @@ const TABS = [
   { id: 'upgrades', label: 'Upgrades', icon: 'fi fi-sr-bolt' },
   { id: 'research', label: 'Forschung', icon: 'fi fi-sr-flask' },
   { id: 'breeding', label: 'Kreuzung', icon: 'fi fi-sr-flask' },
+  { id: 'library', label: 'Genetik-Bibliothek', icon: 'fi fi-sr-book' },
   { id: 'employees', label: 'Mitarbeiter', icon: 'fi fi-sr-users' },
   { id: 'stats', label: 'Stats', icon: 'fi fi-sr-chart-line-up' },
   { id: 'prestige', label: 'Prestige', icon: 'fi fi-sr-diamond' },
@@ -110,6 +111,9 @@ export default function Page() {
         return <ResearchTab state={state} actions={actions} />;
       case 'breeding':
         return <BreedingTab state={state} actions={actions} />;
+      case 'library':
+        const LibraryTab = require('./components/tabs/LibraryTab').LibraryTab;
+        return <LibraryTab state={state} />;
       case 'employees':
         return <StaffTab state={state} actions={actions} />;
       case 'stats':

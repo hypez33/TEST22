@@ -11,7 +11,8 @@ import {
   PharmacyContract,
   Rarity,
   ResearchBranch,
-  Strain
+  Strain,
+  StrainTrait
 } from './types';
 
 export const STAGE_LABELS = ['Keimphase', 'Vegetativ', 'VorBluete', 'Bluete', 'Finish'] as const;
@@ -50,6 +51,15 @@ export const DIFFICULTIES = {
 } as const;
 
 export const PEST_GLOBAL_RATE = 0.25;
+
+export const POSSIBLE_TRAITS: Record<string, StrainTrait> = {
+  drought_resist: { id: 'drought_resist', name: 'Dürreresistent', type: 'water', value: -0.2, desc: 'Weniger Wasserverbrauch' },
+  resin_bomb: { id: 'resin_bomb', name: 'Harz-Bombe', type: 'quality', value: 0.15, desc: 'Qualität +15%' },
+  fast_bloom: { id: 'fast_bloom', name: 'Schnellblüher', type: 'growth', value: -0.1, desc: 'Wachstumszeit -10%' },
+  mold_prone: { id: 'mold_prone', name: 'Schimmelanfällig', type: 'pest', value: 0.3, desc: 'Schimmelrisiko +30%', isNegative: true },
+  golden_ratio: { id: 'golden_ratio', name: 'Goldener Schnitt', type: 'price', value: 0.1, desc: 'Verkaufspreis +10%' },
+  big_yield: { id: 'big_yield', name: 'Ertragsreich', type: 'yield', value: 0.12, desc: 'Ertrag +12%' }
+};
 
 export const EXTRA_PESTS: Record<string, Pest> = {
   root_rot: { id: 'root_rot', name: 'Wurzelfaeule', icon: 'RR', base: 0.006, effect: { growth: 0.4, health: -2.5, quality: -0.02 } },

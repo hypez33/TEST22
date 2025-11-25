@@ -34,13 +34,14 @@ import {
   SAVE_KEY,
   STAGE_LABELS,
   STRAINS,
+  POSSIBLE_TRAITS,
   WATER_ADD_AMOUNT,
   WATER_DRAIN_PER_SEC,
   WATER_MAX,
   WATER_START,
   buildCaseConfigs
 } from './data';
-import { CaseStats, CartEntry, GameState, Plant, ProcessedBatch, ProcessingState, QuestProgress, Rarity, Strain } from './types';
+import { CaseStats, CartEntry, GameState, Plant, ProcessedBatch, ProcessingState, QuestProgress, Rarity, Strain, StrainTrait } from './types';
 import { QUESTS } from './quests';
 import { ACHIEVEMENTS } from './achievements';
 import { clamp, defaultCaseStats, fmtNumber } from './utils';
@@ -385,6 +386,20 @@ const itemQualityMultiplier = (state: GameState) => {
   return mult;
 };
 
+const traitMultiplier = (strain: Strain, type: 'yield' | 'growth' | 'water' | 'pest' | 'quality' | 'price') => {
+  const traits = strain?.traits || [];
+  return traits.reduce((m, t) => (t.type === type ? m * (1 + t.value) : m), 1);
+};
+
+const traitSpeedMultiplier = (strain: Strain) => {
+  const traits = strain?.traits || [];
+  let mult = 1;
+  for (const t of traits) {
+    if (t.type === 'growth') mult *= 1 - t.value; // negative value -> faster
+  }
+  return Math.max(0.2, mult);
+};
+
 const globalMultiplier = (state: GameState) => {
   let mult = 1;
   for (const up of GLOBAL_UPGRADES) {
@@ -491,7 +506,9 @@ export const harvestYieldDetails = (state: GameState, plant: Plant) => {
   const cap = rarityCaps[(strain.rarity || 'common').toLowerCase()] || 800;
   const researchMult = 1 + (res.yield || 0);
   const globalMult = globalMultiplier(state);
-  const raw = base * flowerBonus * levelMult * researchMult * globalMult * bonus * masteryYield * timingBonus;
+  const traitYield = traitMultiplier(strain, 'yield');
+  const traitQuality = traitMultiplier(strain, 'quality');
+  const raw = base * flowerBonus * levelMult * researchMult * globalMult * bonus * masteryYield * timingBonus * traitYield * traitQuality;
   const value = clampYield(raw, cap);
   return {
     value,
@@ -504,6 +521,8 @@ export const harvestYieldDetails = (state: GameState, plant: Plant) => {
       mastery: masteryYield,
       timing: timingBonus,
       event: bonus,
+      traitYield,
+      traitQuality,
       cap,
       appliedCap: value < raw
     }
@@ -589,14 +608,15 @@ const pestRiskModifiers = (state: GameState) => {
   return m;
 };
 
-const maybeSpawnPestFor = (state: GameState, plant: Plant, dt: number, waterRatio: number, nutrientRatio: number) => {
+const maybeSpawnPestFor = (state: GameState, plant: Plant, strain: Strain, dt: number, waterRatio: number, nutrientRatio: number) => {
   const d = DIFFICULTIES[state.difficulty] || DIFFICULTIES.normal;
   const mods = pestRiskModifiers(state);
   const pestRate = state.pestGlobalRate || PEST_GLOBAL_RATE;
+  const traitRisk = Math.max(0.05, traitMultiplier(strain, 'pest'));
   const stagesIdx = Math.min(STAGE_LABELS.length - 1, Math.floor(plant.growProg * STAGE_LABELS.length));
   const inFlower = STAGE_LABELS[stagesIdx] === 'Bluete';
   for (const pest of PESTS) {
-    let risk = pest.base * dt * (d.pest || 1) * (pestRate || 1);
+    let risk = pest.base * dt * (d.pest || 1) * (pestRate || 1) * traitRisk;
     if ((pest.id === 'mold' || pest.id === 'mites') && !inFlower) continue;
     if (pest.prefers === 'dry' && waterRatio < 0.35) risk *= 3;
     if (pest.prefers === 'wet' && waterRatio > 0.85) risk *= 3.5;
@@ -612,13 +632,13 @@ const maybeSpawnPestFor = (state: GameState, plant: Plant, dt: number, waterRati
     }
   }
   if (!plant.pest) {
-    let r1 = (EXTRA_PESTS.root_rot.base || 0.006) * dt * (pestRate || 1);
+    let r1 = (EXTRA_PESTS.root_rot.base || 0.006) * dt * (pestRate || 1) * traitRisk;
     r1 *= waterRatio > 0.9 ? 6 : 0.1;
     if (Math.random() < r1) {
       plant.pest = { id: 'root_rot', sev: 1 };
       return;
     }
-    let r2 = (EXTRA_PESTS.leaf_rot.base || 0.008) * dt * (pestRate || 1);
+    let r2 = (EXTRA_PESTS.leaf_rot.base || 0.008) * dt * (pestRate || 1) * traitRisk;
     r2 *= nutrientRatio > 0.9 ? 5 : 0.1;
     if (Math.random() < r2) {
       plant.pest = { id: 'leaf_rot', sev: 1 };
@@ -629,6 +649,7 @@ const maybeSpawnPestFor = (state: GameState, plant: Plant, dt: number, waterRati
 const advancePlant = (state: GameState, plant: Plant, delta: number) => {
   ensurePlantDefaults(plant);
   let remaining = delta;
+  const strain = getStrain(state, plant.strainId);
   const growTime = growTimeFor(state, plant);
   while (remaining > 0) {
     const step =
@@ -639,7 +660,8 @@ const advancePlant = (state: GameState, plant: Plant, delta: number) => {
       Math.min(remaining, 1);
     const res = researchEffects(state);
     const waterMult = state.eventWaterMult || 1;
-    plant.water = clamp(plant.water - WATER_DRAIN_PER_SEC * waterMult * (1 - (res.water || 0)) * step, 0, WATER_MAX);
+    const waterTrait = Math.max(0.1, traitMultiplier(strain, 'water'));
+    plant.water = clamp(plant.water - WATER_DRAIN_PER_SEC * waterMult * (1 - (res.water || 0)) * waterTrait * step, 0, WATER_MAX);
     plant.nutrients = clamp(plant.nutrients - NUTRIENT_DRAIN_PER_SEC * step, 0, NUTRIENT_MAX);
 
     const waterRatio = plant.water / WATER_MAX;
@@ -649,6 +671,7 @@ const advancePlant = (state: GameState, plant: Plant, delta: number) => {
 
     const d = DIFFICULTIES[state.difficulty] || DIFFICULTIES.normal;
     let growthFactor = d.growth * (state.growthBonus || 1);
+    growthFactor *= traitSpeedMultiplier(strain);
     let healthDelta = 0;
     let qualityDelta = 0;
     if (plant.pgrBoostSec && plant.pgrBoostSec > 0) {
@@ -695,7 +718,7 @@ const advancePlant = (state: GameState, plant: Plant, delta: number) => {
     }
 
     if (!plant.pest) {
-      maybeSpawnPestFor(state, plant, step, waterRatio, nutrientRatio);
+      maybeSpawnPestFor(state, plant, strain, step, waterRatio, nutrientRatio);
     } else {
       const pestDef = pestDefById(plant.pest.id) || { effect: { growth: 0.8, health: -1, quality: -0.01 } };
       const sev = plant.pest.sev || 1;
@@ -2536,7 +2559,7 @@ const performEmployeeTask = (state: GameState, task: string) => {
   return false;
 };
 
-const calculateHybridProfile = (p1: Strain, p2: Strain, randomFn = Math.random) => {
+const calculateHybridProfile = (p1: Strain, p2: Strain, randomFn = Math.random): Strain => {
   const idx1 = strainRarityIndex(p1);
   const idx2 = strainRarityIndex(p2);
   const maxIdx = Math.max(idx1, idx2);
@@ -2550,16 +2573,30 @@ const calculateHybridProfile = (p1: Strain, p2: Strain, randomFn = Math.random) 
   }
   newIdx = Math.min(newIdx, CASE_RARITIES.length - 1);
   const newRarity = CASE_RARITIES[newIdx];
-  const baseGeneration = Math.max(Number(p1.generation || 0), Number(p2.generation || 0));
+  const baseGeneration = Math.max(Number(p1.generation || 1), Number(p2.generation || 1));
   const generation = baseGeneration + 1;
-  const genLabel = generation === 1 ? 'Hybrid' : generation === 2 ? 'Ultra Hybrid' : generation === 3 ? 'Supra Hybrid' : generation === 4 ? 'Mythic Hybrid' : `Omega Hybrid Gen ${generation}`;
-  const name = `${genLabel}: ${p1.name} x ${p2.name}`;
+  const maxTraits = Math.min(1 + generation, 5);
+  const combinedTraits = [...(p1.traits || []), ...(p2.traits || [])];
+  const traits: StrainTrait[] = [];
+  const tryInherit = (t: StrainTrait) => {
+    if (traits.length >= maxTraits) return;
+    if (traits.find((x) => x.id === t.id)) return;
+    if (randomFn() < 0.4) traits.push({ ...t });
+  };
+  combinedTraits.forEach(tryInherit);
+  if (traits.length < maxTraits && randomFn() < 0.2) {
+    const pool = Object.values(POSSIBLE_TRAITS);
+    const pick = pool[Math.floor(randomFn() * pool.length)];
+    if (pick && !traits.find((x) => x.id === pick.id)) traits.push({ ...pick });
+  }
   const baseCost = (p1.cost + p2.cost) / 2;
   const baseYield = (p1.yield + p2.yield) / 2;
   const baseGrow = (p1.grow + p2.grow) / 2;
   const baseQuality = (p1.quality + p2.quality) / 2;
   const baseYieldBonus = (p1.yieldBonus || 0 + (p2.yieldBonus || 0)) / 2;
   const baseOfferBonus = (p1.offerBonus || 0 + (p2.offerBonus || 0)) / 2;
+  const genLabel = generation === 1 ? 'Hybrid' : generation === 2 ? 'Ultra Hybrid' : generation === 3 ? 'Supra Hybrid' : generation === 4 ? 'Mythic Hybrid' : `Omega Hybrid Gen ${generation}`;
+  const name = `${genLabel}: ${p1.name} x ${p2.name}`;
   const yieldRoll = randomFn();
   const yieldBoost = clamp(0.6 + yieldRoll * 2.4 + newIdx * 0.08, 0.45, 3.5);
   const newYield = Math.max(40, Math.round(baseYield * yieldBoost));
@@ -2583,7 +2620,8 @@ const calculateHybridProfile = (p1: Strain, p2: Strain, randomFn = Math.random) 
     yieldBonus: newYieldBonus,
     offerBonus: newOfferBonus,
     desc: `Hybrid aus ${p1.name} und ${p2.name}`,
-    generation
+    generation,
+    traits: traits.slice(0, maxTraits)
   } as Strain;
 };
 

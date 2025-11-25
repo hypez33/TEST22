@@ -39,6 +39,7 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
   const dryYield = wetYield * DRY_WEIGHT_MULTIPLIER;
   const yieldInfo = harvestYieldDetails(state, plant);
   const qualityMult = qualityMultiplier(state, plant);
+  const traitBadges = strain.traits || [];
   const ready = plant.growProg >= 1;
   const isWilted = (plant.health || 0) <= 0;
   const hasPest = !!plant.pest;
@@ -162,6 +163,15 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
             Timer <span>{formatTimer(timer)}</span>
           </div>
           <div className="plant-health">Vitalität {Math.round(plant.health)}%</div>
+          {traitBadges.length > 0 && (
+            <div className="plant-traits">
+              {traitBadges.map((t) => (
+                <span key={t.id} className={`trait-badge ${t.isNegative ? 'negative' : ''}`} title={t.desc}>
+                  {t.name}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       <div className="plant-prod" title="Ertrag je Ernte (trocken)">
           <Tooltip content={<YieldTooltip breakdown={yieldInfo.breakdown} qualityMult={qualityMult} />}>
