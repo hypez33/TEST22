@@ -1739,6 +1739,7 @@ export const quickBuyApply = (state: GameState, type: QuickBuyType, slot: number
     if (!p) return;
     if (type === 'water') {
       p.water = Math.min(WATER_MAX, (p.water || 0) + WATER_ADD_AMOUNT);
+      draft.consumables.water = Math.max(0, (draft.consumables.water || 0) + (count - 1));
     }
     if (type === 'nutrient') {
       p.nutrients = Math.min(NUTRIENT_MAX, (p.nutrients || 0) + NUTRIENT_ADD_AMOUNT);

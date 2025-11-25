@@ -7,9 +7,11 @@ import { fmtNumber, formatTimer } from '@/lib/game/utils';
 import { GameState, Plant, Strain } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
 import { emitFloatingText } from './ui/FloatingTextLayer';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSound } from '../hooks/useSound';
 import { QuickBuyModal } from './modals/QuickBuyModal';
+import MiniGameModal from './modals/MiniGameModal';
 
 type Props = {
   plant: Plant;
@@ -22,6 +24,8 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
   const harvestSound = useSound('/assets/audio/harvest.mp3', state.soundFx !== false);
   const cashSound = useSound('/assets/audio/cash.mp3', state.soundFx !== false);
   const [quickBuy, setQuickBuy] = useState<{ type: 'water' | 'nutrient' | 'spray'; slot: number } | null>(null);
+  const [miniGame, setMiniGame] = useState<{ type: 'water' | 'harvest' | 'feed' | 'treat'; slot: number } | null>(null);
+  const lastPointer = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const growPct = Math.round((plant.growProg || 0) * 100);
   const waterPct = Math.round(((plant.water || 0) / WATER_MAX) * 100);
   const nutrientPct = Math.round(((plant.nutrients || 0) / NUTRIENT_MAX) * 100);
@@ -35,6 +39,8 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
   const mastery = (state.strainMastery || {})[plant.strainId] || 0;
   const masteryLevel = mastery >= 1000 ? 10 : mastery >= 600 ? 7 : mastery >= 300 ? 5 : mastery >= 120 ? 3 : mastery >= 60 ? 2 : mastery >= 30 ? 1 : 0;
   const autoGrowOn = !!state.autoGrow?.[plant.strainId];
+  const miniGamesEnabled = state.settings?.miniGamesEnabled ?? true;
+  const autoSkipMiniGame = state.settings?.autoSkipMiniGame ?? false;
 
   const phase = (() => {
     const gp = Math.max(0, Math.min(1, plant.growProg || 0));
@@ -46,23 +52,38 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
   const phaseImage = `/assets/phase${phase}.png`;
 
   const showFloat = (text: string, e: React.MouseEvent, tone: 'gain' | 'loss' | 'info' = 'gain') => {
+    lastPointer.current = { x: e.clientX, y: e.clientY };
     emitFloatingText(text, e.clientX, e.clientY, tone);
+  };
+
+  const showFloatFromPointer = (text: string, tone: 'gain' | 'loss' | 'info' = 'gain') => {
+    emitFloatingText(text, lastPointer.current.x, lastPointer.current.y, tone);
   };
 
   const handleHarvest = (e: React.MouseEvent) => {
     if (!ready) return;
-    actions.harvestPlant(plant.slot);
-    showFloat(`+${fmtNumber(wetYield)}g Nass`, e, 'gain');
-    harvestSound.play();
+    if (!miniGamesEnabled || autoSkipMiniGame || masteryLevel >= 10) {
+      actions.harvestPlant(plant.slot);
+      showFloat(`+${fmtNumber(wetYield)}g Nass`, e, 'gain');
+      harvestSound.play();
+      return;
+    }
+    lastPointer.current = { x: e.clientX, y: e.clientY };
+    setMiniGame({ type: 'harvest', slot: plant.slot });
   };
 
   const handleWater = (e: React.MouseEvent) => {
-    if ((state.cash || 0) < WATER_COST_PER_USE) {
+    if ((state.consumables.water || 0) <= 0) {
       setQuickBuy({ type: 'water', slot: plant.slot });
       return;
     }
-    actions.waterPlant(plant.slot);
-    showFloat(`-${WATER_COST_PER_USE.toFixed(2)} $`, e, 'info');
+    if (!miniGamesEnabled || autoSkipMiniGame) {
+      actions.waterPlant(plant.slot);
+      showFloat(`-${WATER_COST_PER_USE.toFixed(2)} $`, e, 'info');
+      return;
+    }
+    lastPointer.current = { x: e.clientX, y: e.clientY };
+    setMiniGame({ type: 'water', slot: plant.slot });
   };
 
   const handleFeed = (e: React.MouseEvent) => {
@@ -70,8 +91,13 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
       setQuickBuy({ type: 'nutrient', slot: plant.slot });
       return;
     }
-    actions.feedPlant(plant.slot);
-    showFloat('-1 Dünger', e, 'info');
+    if (!miniGamesEnabled || autoSkipMiniGame) {
+      actions.feedPlant(plant.slot);
+      showFloat('-1 Dünger', e, 'info');
+      return;
+    }
+    lastPointer.current = { x: e.clientX, y: e.clientY };
+    setMiniGame({ type: 'feed', slot: plant.slot });
   };
 
   const handleTreat = (e: React.MouseEvent) => {
@@ -79,8 +105,13 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
       setQuickBuy({ type: 'spray', slot: plant.slot });
       return;
     }
-    actions.treatPlant(plant.slot);
-    showFloat('Abwehr', e, 'info');
+    if (!miniGamesEnabled || autoSkipMiniGame) {
+      actions.treatPlant(plant.slot);
+      showFloat('Abwehr', e, 'info');
+      return;
+    }
+    lastPointer.current = { x: e.clientX, y: e.clientY };
+    setMiniGame({ type: 'treat', slot: plant.slot });
   };
 
   return (
@@ -202,6 +233,39 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
         }}
       />
     )}
+    {miniGame &&
+      typeof document !== 'undefined' &&
+      createPortal(
+        <MiniGameModal
+          isOpen={!!miniGame}
+          type={miniGame.type}
+          difficulty={state.settings?.miniGameDifficulty || 'normal'}
+          onSuccess={(bonus) => {
+            if (miniGame.type === 'harvest') {
+              actions.harvestPlantWithBonus?.(miniGame.slot, bonus);
+              const yieldAmount = harvestYieldFor(state, plant) * qualityMultiplier(state, plant) * bonus;
+              showFloatFromPointer(`+${fmtNumber(yieldAmount)}g Nass`, 'gain');
+              harvestSound.play();
+            } else if (miniGame.type === 'water') {
+              actions.waterPlant(miniGame.slot);
+              showFloatFromPointer(`-${WATER_COST_PER_USE.toFixed(2)} $`, 'info');
+            } else if (miniGame.type === 'feed') {
+              actions.feedPlantWithBonus?.(miniGame.slot, bonus);
+              showFloatFromPointer(`-1 Dünger`, 'info');
+            } else if (miniGame.type === 'treat') {
+              actions.treatPlant(miniGame.slot);
+              showFloatFromPointer(`Abwehr`, 'info');
+            }
+            setMiniGame(null);
+          }}
+          onFail={() => {
+            showFloatFromPointer('❌ Fehlgeschlagen!', 'loss');
+            setMiniGame(null);
+          }}
+          onClose={() => setMiniGame(null)}
+        />,
+        document.body
+      )}
     </>
   );
 }

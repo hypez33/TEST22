@@ -4279,8 +4279,9 @@ body.high-contrast .shop-item.is-locked{opacity:0.85;}
 .responsive-grid{
   display:grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap:16px;
+  gap: 1rem;
   align-items:stretch;
+  width:100%;
 }
 .job-card, .estate-card, .upgrade, .research-card{
   height:100%;
@@ -4304,4 +4305,107 @@ body.high-contrast .shop-item.is-locked{opacity:0.85;}
 .responsive-grid > div .card-footer {
   margin-top: auto;
 }
+
+.mini-game-backdrop{
+  position:fixed;
+  inset:0;
+  display:grid;
+  place-items:start center;
+  padding:64px 16px 24px;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(10px);
+  z-index:999;
+  overflow-y:auto;
+}
+.mini-game-card{
+  position:relative;
+  width:min(520px, 92vw);
+  max-height:calc(100vh - 120px);
+  background: linear-gradient(180deg, #0d1510, rgba(0,0,0,0.9));
+  border:1px solid rgba(34,197,94,0.35);
+  border-radius:16px;
+  padding:18px;
+  color: var(--text);
+  box-shadow: 0 22px 44px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,0.03) inset;
+  overflow:hidden;
+}
+.mini-game-close{
+  position:absolute;
+  top:10px; right:10px;
+  width:32px; height:32px;
+  border-radius:50%;
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  cursor:pointer;
+}
+.mini-game-header{ text-align:center; margin-bottom:12px; }
+.mini-game-emoji{ font-size:36px; }
+.mini-game-header h2{ margin:6px 0 4px; }
+.mini-game-header p{ margin:0; color: var(--muted); font-size:14px; }
+.mini-game-meta{ font-size:12px; color: var(--muted); margin-top:4px; }
+.mini-game-track{
+  position:relative;
+  height:64px;
+  background: rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:10px;
+  overflow:hidden;
+  margin:12px 0;
+}
+.mini-game-target{
+  position:absolute;
+  top:0; bottom:0;
+  background: rgba(34,197,94,0.18);
+  border-left:2px solid rgba(34,197,94,0.6);
+  border-right:2px solid rgba(34,197,94,0.6);
+}
+.mini-game-perfect{
+  position:absolute;
+  top:0; bottom:0;
+  left:45%; width:10%;
+  background: rgba(251,191,36,0.2);
+  border-left:2px solid rgba(251,191,36,0.6);
+  border-right:2px solid rgba(251,191,36,0.6);
+}
+.mini-game-slider{
+  position:absolute;
+  top:0; bottom:0;
+  width:6px;
+  background:#fff;
+  box-shadow: 0 0 20px rgba(255,255,255,0.8);
+  transition: background .2s ease, box-shadow .2s ease;
+}
+.mini-game-slider.perfect{ background:#fbbf24; box-shadow:none; }
+.mini-game-slider.good{ background:#34d399; box-shadow:none; }
+.mini-game-slider.bad{ background:#f87171; box-shadow:none; }
+.mini-game-result{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:800;
+  font-size:24px;
+  text-shadow:0 2px 10px rgba(0,0,0,.5);
+}
+.mini-game-result.perfect{ color:#fbbf24; }
+.mini-game-result.good{ color:#34d399; }
+.mini-game-result.bad{ color:#f87171; }
+.mini-game-start{
+  width:100%;
+  padding:12px;
+  border-radius:10px;
+  border:1px solid rgba(34,197,94,0.4);
+  background: linear-gradient(90deg, rgba(34,197,94,0.25), rgba(34,197,94,0.45));
+  color: var(--text);
+  font-weight:700;
+  cursor:pointer;
+}
+.mini-game-instructions{ text-align:center; font-weight:600; }
+.mini-game-instructions .hint{ font-size:12px; color: var(--muted); }
+.mini-game-bonus{ text-align:center; font-size:12px; color: var(--muted); margin-top:8px; }
+.mini-game-bonus .perfect{ color:#fbbf24; margin-right:4px; }
+.mini-game-bonus .good{ color:#34d399; margin-right:4px; }
+.mini-game-bonus .bad{ color:#f87171; margin-left:4px; }
 
