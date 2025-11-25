@@ -66,10 +66,11 @@ export function ShopTab({ state, actions }: Props) {
                 const purchased = state.purchasedCount[strain.id] || 0;
                 const disabled = state.cash < price;
                 return (
-                  <div key={strain.id} className={`shop-item ${disabled ? 'disabled' : ''}`}>
+                  <div key={strain.id} className={`shop-item rarity-${(strain.rarity || 'common').toLowerCase()} ${disabled ? 'disabled' : ''}`}>
                     <div className="shop-item-left">
                       <Tooltip content={strain.desc || ''}>
                         <div className="shop-item-name">
+                          <span className="rarity-dot" aria-hidden="true"></span>
                           {strain.name} <span className="pill muted">{strain.rarity}</span>
                         </div>
                       </Tooltip>

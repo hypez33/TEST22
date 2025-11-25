@@ -137,14 +137,16 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
 
   return (
     <>
-    <div className={`plant-card ${ready ? 'plant-card-ready' : ''}`} data-slot={plant.slot}>
+    <div className={`plant-card ${ready ? 'plant-card-ready' : ''} rarity-${strain.rarity || 'common'}`} data-slot={plant.slot}>
       <div className="plant-header">
         <div className="plant-left">
           <div className="plant-name">{strain.name}</div>
           <div className="plant-level">Level {plant.level}</div>
         </div>
         <div className="plant-meta mastery">
-          <span className="pill muted">Mastery L{masteryLevel}</span>
+          <span className="pill muted mastery-pill">
+            <i className="fi fi-sr-star" aria-hidden="true"></i> Mastery L{masteryLevel}
+          </span>
           {masteryLevel >= 10 && (
             <button className="chip small" onClick={() => actions.setAutoGrow?.(plant.strainId, !autoGrowOn)}>
               Auto-Grow {autoGrowOn ? 'An' : 'Aus'}
@@ -171,7 +173,7 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
         )}
       </div>
       <div className="plant-visual">
-        <div className={`plant-media ${isWilted ? 'wilted' : ''} ${hasPest ? 'pested' : ''}`}>
+        <div className={`plant-media ${isWilted ? 'wilted' : ''} ${hasPest ? 'pested' : ''} ${ready ? 'ready-pulse' : ''}`}>
           <Image src={phaseImage} alt={`Wachstumsphase ${phase}`} width={220} height={180} className="plant-phase-img" />
           {hasPest && (
             <div className="plant-overlay pest">
@@ -200,6 +202,7 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
           <i className="fi fi-sr-raindrops"></i> Wasser
         </div>
         <div className="water" title="Wasserstand">
+          <div className="bar-icon">💧</div>
           <div className={`water-bar ${waterLow ? 'low' : ''}`} style={{ width: `${waterPct}%` }} />
         </div>
         <div className="bar-value">{waterPct}%</div>

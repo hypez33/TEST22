@@ -2903,6 +2903,96 @@ button:active{ transform: translateY(0) scale(.98) !important; box-shadow: inset
 .click-effects .particle-leaf{ color:#34d399; }
 .click-effects .particle-coin{ color:#facc15; }
 
+/* Shop rarity accents */
+.shop-item.rarity-common{ border-left:3px solid #22c55e; background: linear-gradient(90deg, rgba(34,197,94,0.08), transparent); }
+.shop-item.rarity-uncommon{ border-left:3px solid #3b82f6; background: linear-gradient(90deg, rgba(59,130,246,0.08), transparent); }
+.shop-item.rarity-rare{ border-left:3px solid #a855f7; background: linear-gradient(90deg, rgba(168,85,247,0.08), transparent); }
+.shop-item.rarity-epic{ border-left:3px solid #ec4899; background: linear-gradient(90deg, rgba(236,72,153,0.08), transparent); }
+.shop-item.rarity-legendary{ border-left:3px solid #facc15; background: linear-gradient(90deg, rgba(250,204,21,0.08), transparent); }
+.shop-item .rarity-dot{
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  display:inline-block;
+  margin-right:6px;
+}
+.shop-item.rarity-common .rarity-dot{ background:#22c55e; }
+.shop-item.rarity-uncommon .rarity-dot{ background:#3b82f6; }
+.shop-item.rarity-rare .rarity-dot{ background:#a855f7; }
+.shop-item.rarity-epic .rarity-dot{ background:#ec4899; }
+.shop-item.rarity-legendary .rarity-dot{ background:#facc15; }
+
+/* Inventory rarity bar */
+.inventory-slot{
+  position:relative;
+}
+.inventory-slot::before{
+  content:'';
+  position:absolute;
+  left:-6px;
+  top:8px;
+  bottom:8px;
+  width:4px;
+  border-radius:999px;
+  background: rgba(255,255,255,0.1);
+}
+.inventory-slot.rarity-common::before{ background:#22c55e; box-shadow:0 0 10px #22c55e55; }
+.inventory-slot.rarity-uncommon::before{ background:#3b82f6; box-shadow:0 0 10px #3b82f655; }
+.inventory-slot.rarity-rare::before{ background:#a855f7; box-shadow:0 0 10px #a855f755; }
+.inventory-slot.rarity-epic::before{ background:#ec4899; box-shadow:0 0 10px #ec489955; }
+.inventory-slot.rarity-legendary::before{ background:#facc15; box-shadow:0 0 10px #facc1555; }
+
+/* Cases rarity glow */
+.cases-control .shop-item{
+  border-radius:12px;
+  margin-bottom:10px;
+  border:1px solid rgba(255,255,255,0.08);
+}
+.cases-control .shop-item.shop-item-active{
+  box-shadow:0 0 16px rgba(34,197,94,0.3);
+  border-color: rgba(34,197,94,0.6);
+}
+
+/* Trend animation */
+.price-value .trend.up{ animation: trendPulse 1.6s ease-in-out infinite; }
+.price-value .trend.down{ animation: trendPulseDown 1.6s ease-in-out infinite; }
+@keyframes trendPulse{
+  0%,100%{ transform: translateY(0); }
+  50%{ transform: translateY(-2px) scale(1.05); }
+}
+@keyframes trendPulseDown{
+  0%,100%{ transform: translateY(0); }
+  50%{ transform: translateY(2px) scale(1.05); }
+}
+
+/* Rarity glows */
+.plant-card.rarity-common{ border:1px solid rgba(34,197,94,0.35); box-shadow: 0 0 14px rgba(34,197,94,0.15); }
+.plant-card.rarity-uncommon{ border:1px solid rgba(59,130,246,0.4); box-shadow: 0 0 14px rgba(59,130,246,0.18); }
+.plant-card.rarity-rare{ border:1px solid rgba(168,85,247,0.45); box-shadow: 0 0 16px rgba(168,85,247,0.2); }
+.plant-card.rarity-epic{ border:1px solid rgba(236,72,153,0.45); box-shadow: 0 0 18px rgba(236,72,153,0.25); }
+.plant-card.rarity-legendary{ border:1px solid rgba(250,204,21,0.55); box-shadow: 0 0 20px rgba(250,204,21,0.25); }
+.plant-header .mastery-pill{ background: linear-gradient(90deg, rgba(250,204,21,0.2), rgba(34,197,94,0.2)); border:1px solid rgba(250,204,21,0.4); }
+
+.plant-media.ready-pulse .plant-phase-img{
+  animation: readyPulse 1.3s ease-in-out infinite;
+}
+@keyframes readyPulse{
+  0%,100%{ transform: scale(1); filter: drop-shadow(0 0 8px rgba(34,197,94,0.6)); }
+  50%{ transform: scale(1.04); filter: drop-shadow(0 0 14px rgba(34,197,94,0.8)); }
+}
+
+.water .bar-icon{
+  position:absolute;
+  left:6px;
+  top:50%;
+  transform: translateY(-50%);
+  font-size:14px;
+  opacity:0.7;
+}
+.water{
+  padding-left:18px;
+}
+
 .toast-container{
   position:fixed;
   top:12px;
@@ -4617,12 +4707,17 @@ body.high-contrast .shop-item.is-locked{opacity:0.85;}
 .icon-btn:hover:not(:disabled){
   transform: translateY(-1px) scale(1.03);
   box-shadow: 0 8px 18px rgba(0,0,0,0.25);
+  filter: brightness(1.08);
 }
 .icon-btn:active:not(:disabled){
   transform: translateY(1px) scale(0.97);
   box-shadow: 0 4px 10px rgba(0,0,0,0.3) inset;
   filter: brightness(1.1);
 }
+.icon-btn i{ transition: transform .18s ease, opacity .18s ease; }
+.icon-btn:hover i{ transform: translateY(-1px) rotate(-4deg); }
+.icon-btn:active i{ transform: scale(0.92); }
+.icon-btn:disabled i{ opacity:0.5; filter: grayscale(1); }
 .icon-btn.flash{
   animation: btnFlash .45s ease;
 }
