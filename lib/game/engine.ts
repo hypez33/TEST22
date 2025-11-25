@@ -1,7 +1,6 @@
 import { isDraft, produce } from 'immer';
 import {
   APOTHEKEN_VERTRAEGE,
-  BASE_PRICE_PER_G,
   CASE_RARITIES,
   CONSUMABLE_PACKS,
   DAYS_PER_YEAR,
@@ -9,17 +8,12 @@ import {
   EMPLOYEES,
   EXTRA_PESTS,
   GAME_DAY_REAL_SECONDS,
-  GLOBAL_UPGRADES,
   GROW_ROOMS,
   HEALTH_DECAY_DRY,
   HEALTH_DECAY_HUNGRY,
   HEALTH_RECOVER_RATE,
   ITEMS,
   JOBS,
-  OFFER_SPAWN_MAX,
-  OFFER_SPAWN_MIN,
-  MAX_ACTIVE_OFFERS_BASE,
-  MAX_SLOTS,
   NUTRIENT_ADD_AMOUNT,
   NUTRIENT_DRAIN_PER_SEC,
   NUTRIENT_MAX,
@@ -41,22 +35,95 @@ import {
   WATER_START,
   buildCaseConfigs
 } from './data';
-import { CaseStats, CartEntry, GameState, Plant, ProcessedBatch, ProcessingState, QuestProgress, Rarity, Strain, StrainTrait } from './types';
+import { CaseStats, CartEntry, GameState, Plant, QuestProgress, Rarity, Strain, StrainTrait } from './types';
 import { QUESTS } from './quests';
 import { ACHIEVEMENTS } from './achievements';
 import { clamp, defaultCaseStats, fmtNumber } from './utils';
+import {
+  advanceProcessing,
+  collectAllProcessed as collectAllProcessedProcessing,
+  collectProcessed as collectProcessedProcessing,
+  DRY_WEIGHT_MULT,
+  ensureProcessing,
+  fillDryingSlots,
+  pressRosin as pressRosinProcessing,
+  startCuring as startCuringProcessing,
+  startDrying as startDryingProcessing
+} from './logic/processing';
+import {
+  clampQualityValue,
+  clampYield,
+  currentGrowRoom,
+  currentMaxSlots,
+  globalMultiplier,
+  itemCost,
+  itemQualityMultiplier,
+  masteryForStrain,
+  pestRiskModifiers,
+  researchEffects,
+  seedCost,
+  slotUnlockCost,
+  traitMultiplier,
+  traitSpeedMultiplier,
+  upgradeCost,
+  xpForNext
+} from './logic/shared';
+import {
+  acceptOffer as acceptOfferMarket,
+  declineOffer as declineOfferMarket,
+  deliverApotheke as deliverApothekeMarket,
+  deliverOrder as deliverOrderMarket,
+  declineOrder as declineOrderMarket,
+  getSalePricePerGram as getSalePricePerGramMarket,
+  marketDrift as marketDriftLogic,
+  maybeApplyRandomNews,
+  sellGrams as sellGramsMarket,
+  sellToBuyer as sellToBuyerMarket,
+  spawnApothekenOffer as spawnApothekenOfferMarket,
+  spawnMarketEvent as spawnMarketEventLogic,
+  spawnOffer as spawnOfferMarket,
+  spawnOrder as spawnOrderMarket,
+  triggerMarketEvent as triggerMarketEventLogic,
+  currentSpawnWindowForState,
+  currentMaxOffersForState
+} from './logic/market';
+import {
+  advancePlant,
+  bulkFeed as bulkFeedPlants,
+  bulkWater as bulkWaterPlants,
+  buySeed as buySeedPlant,
+  computePerSec as computePerSecPlants,
+  createPlant,
+  ensureConsumables,
+  ensurePlantDefaults,
+  feedPlant as feedPlantPlants,
+  feedPlantWithBonus as feedPlantWithBonusPlants,
+  getAllStrains,
+  getStrain,
+  growTimeFor as growTimeForPlant,
+  harvestAllReady as harvestAllReadyPlants,
+  harvestPlant as harvestPlantPlants,
+  harvestPlantWithBonus as harvestPlantWithBonusPlants,
+  harvestYieldDetails as harvestYieldDetailsPlants,
+  harvestYieldFor as harvestYieldForPlants,
+  plantSeed as plantSeedPlant,
+  qualityMultiplier as qualityMultiplierPlants,
+  removePlant as removePlantPlant,
+  statusForPlant as statusForPlantPlants,
+  timerForPlant as timerForPlantPlants,
+  treatPlant as treatPlantPlants,
+  unlockSlot as unlockSlotPlant,
+  upgradePlant as upgradePlantPlants,
+  waterPlant as waterPlantPlants,
+  quickBuyApply as quickBuyApplyPlants,
+  WATER_COST_PER_USE,
+  WATER_COST
+} from './logic/plants';
+export { clampYield, currentGrowRoom, currentMaxSlots, itemCost, masteryLevelFor, researchEffects, seedCost, slotUnlockCost, upgradeCost, xpForNext } from './logic/shared';
 
 export const SPEED_OPTIONS = [0, 0.5, 1, 2, 7];
 const SAVE_VERSION = 2;
-const DRYING_TIME_SEC = 240;
-const CURING_TIME_SEC = 300;
-const DRY_WEIGHT_MULT = 0.3;
-const DRY_PRICE_MULT = 1.5;
-const CURING_QUALITY_BONUS = 0.25;
-const CURING_QUALITY_CAP = 2.2;
 const WATER_COST = 0.2;
-const ROSIN_YIELD_MULT = 0.35;
-const ROSIN_MIN_QUALITY = 1;
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 export const createInitialState = (): GameState => ({
@@ -174,64 +241,9 @@ const ensureConsumables = (state: any): GameState => {
   return next;
 };
 
-const MARKET_TRENDS = [
-  { id: 'indica', name: 'Indica-Hype', mult: 1.2, desc: 'Indica gefragt. +20% Verkaufspreis' },
-  { id: 'sativa', name: 'Sativa-Surge', mult: 1.15, desc: 'Sativa ist gefragt. +15% Preis' },
-  { id: 'organic', name: 'Bio-Boom', mult: 1.1, desc: 'Bio-Käufer zahlen mehr.' },
-  { id: 'glut', name: 'Markt-Glut', mult: 0.85, desc: 'Übersättigung. -15% Preis' },
-  { id: 'stable', name: 'Stabil', mult: 1.0, desc: 'Normale Nachfrage.' }
-];
-
-const MARKET_NEWS = [
-  { name: 'Polizei-Razzia in der Stadt! Preise steigen', mult: 1.2, duration: 300 },
-  { name: 'Große Ernteflut! Preise sinken', mult: 0.85, duration: 240 },
-  { name: 'Medizinischer Boom', mult: 1.15, duration: 360 }
-];
-
-const MARKET_EVENTS = [
-  { type: 'heatwave', name: 'Hitzewelle', desc: 'Wasserverbrauch +50%', duration: 300 },
-  { type: 'festival', name: 'Festival in der Stadt', desc: 'Preise +20%', duration: 600 }
-];
-
-const masteryLevel = (xp: number) => {
-  if (xp >= 1000) return 10;
-  if (xp >= 600) return 7;
-  if (xp >= 300) return 5;
-  if (xp >= 120) return 3;
-  if (xp >= 60) return 2;
-  if (xp >= 30) return 1;
-  return 0;
-};
-
 const addMasteryXp = (state: GameState, strainId: string, xp: number) => {
   state.strainMastery = state.strainMastery || {};
   state.strainMastery[strainId] = (state.strainMastery[strainId] || 0) + xp;
-};
-
-const masteryForStrain = (state: GameState, strainId: string) => {
-  const xp = (state.strainMastery || {})[strainId] || 0;
-  return { xp, level: masteryLevel(xp) };
-};
-
-export const masteryLevelFor = masteryLevel;
-
-const ensureProcessing = (state: any): ProcessingState => {
-  const normalize = (source?: Partial<ProcessingState>): ProcessingState => {
-    const slots = source?.slots || { drying: 2, curing: 2 };
-    return {
-      wet: Array.isArray(source?.wet) ? source!.wet : [],
-      drying: Array.isArray(source?.drying) ? source!.drying : [],
-      curing: Array.isArray(source?.curing) ? source!.curing : [],
-      ready: Array.isArray(source?.ready) ? source!.ready : [],
-      slots: { drying: Math.max(1, slots.drying || 2), curing: Math.max(1, slots.curing || 2) }
-    };
-  };
-  if (isDraft(state)) {
-    state.processing = normalize(state.processing);
-    return state.processing;
-  }
-  const normalized = normalize((state as GameState).processing);
-  return normalized;
 };
 
 const normalizeQuestProgress = (qp: Partial<QuestProgress>): QuestProgress => {
@@ -346,95 +358,6 @@ export const hydrateState = (loaded?: Partial<GameState>): GameState => {
   });
 };
 
-export const slotUnlockCost = (current: number) => Math.round(100 * Math.pow(1.75, Math.max(0, current - 1)));
-
-export const currentGrowRoom = (state: GameState) => GROW_ROOMS[Math.max(0, Math.min(GROW_ROOMS.length - 1, state.growTierIndex || 0))];
-export const currentMaxSlots = (state: GameState) => {
-  const room = currentGrowRoom(state);
-  return Math.min(MAX_SLOTS, room?.slots || 2);
-};
-
-const itemPriceMultiplier = (state: GameState) => {
-  let mult = 1;
-  for (const it of ITEMS) {
-    const owned = state.itemsOwned[it.id] || 0;
-    if (!owned || !it.effects?.priceMult) continue;
-    mult *= Math.pow(it.effects.priceMult, owned);
-  }
-  const res = researchEffects(state);
-  mult *= 1 + (res.priceMult || 0);
-  return mult;
-};
-
-const itemYieldMultiplier = (state: GameState) => {
-  let mult = 1;
-  for (const it of ITEMS) {
-    const owned = state.itemsOwned[it.id] || 0;
-    if (!owned || !it.effects?.yieldMult) continue;
-    mult *= Math.pow(it.effects.yieldMult, owned);
-  }
-  return mult;
-};
-
-const itemQualityMultiplier = (state: GameState) => {
-  let mult = 1;
-  for (const it of ITEMS) {
-    const owned = state.itemsOwned[it.id] || 0;
-    if (!owned || !it.effects?.qualityMult) continue;
-    mult *= Math.pow(it.effects.qualityMult, owned);
-  }
-  return mult;
-};
-
-const traitMultiplier = (strain: Strain, type: 'yield' | 'growth' | 'water' | 'pest' | 'quality' | 'price') => {
-  const traits = strain?.traits || [];
-  return traits.reduce((m, t) => (t.type === type ? m * (1 + t.value) : m), 1);
-};
-
-const traitSpeedMultiplier = (strain: Strain) => {
-  const traits = strain?.traits || [];
-  let mult = 1;
-  for (const t of traits) {
-    if (t.type === 'growth') mult *= 1 - t.value; // negative value -> faster
-  }
-  return Math.max(0.2, mult);
-};
-
-const globalMultiplier = (state: GameState) => {
-  let mult = 1;
-  for (const up of GLOBAL_UPGRADES) {
-    const lvl = state.upgrades[up.id] || 0;
-    if (lvl > 0) mult *= Math.pow(1 + up.inc, lvl);
-  }
-  mult *= itemYieldMultiplier(state);
-  mult *= 1 + 0.05 * Math.sqrt(state.hazePoints || 0);
-  return mult;
-};
-
-export const researchEffects = (state: GameState) => {
-  const res = state.research || {};
-  const eff: Record<string, number> = { yield: 0, growth: 0, quality: 0, pest: 0, water: 0, cost: 0, pest_mold: 0, growthTime: 0, priceMult: 0, nutrientCost: 0 };
-  for (const branchKey in RESEARCH_TREE) {
-    const branch = RESEARCH_TREE[branchKey];
-    for (const nodeKey in branch.nodes) {
-      if (res[nodeKey]) {
-        const e = branch.nodes[nodeKey].effects || {};
-        eff.yield += (e.yield as number) || 0;
-        eff.growth += (e.growth as number) || 0;
-        eff.quality += (e.quality as number) || 0;
-        eff.pest += (e.pest as number) || 0;
-        eff.water += (e.water as number) || 0;
-        eff.cost += (e.cost as number) || 0;
-        eff.pest_mold += (e.pest_mold as number) || 0;
-        eff.growthTime += (e.growthTime as number) || 0;
-        eff.priceMult += (e.priceMult as number) || 0;
-        eff.nutrientCost += (e.nutrientCost as number) || 0;
-      }
-    }
-  }
-  return eff;
-};
-
 export const createPlant = (strainId: string, slot: number): Plant => ({
   slot,
   strainId,
@@ -476,11 +399,6 @@ export const growTimeFor = (state: GameState, plant: Plant) => {
 const plantUpgradeCost = (state: GameState, plant: Plant) => {
   const strain = getStrain(state, plant.strainId);
   return Math.round(strain.cost * Math.pow(1.15, plant.level));
-};
-
-export const clampYield = (val: number, cap = 10000) => {
-  if (!isFinite(val)) return 0;
-  return Math.max(0, Math.min(val, cap));
 };
 
 export const harvestYieldDetails = (state: GameState, plant: Plant) => {
@@ -586,26 +504,6 @@ const pestDefById = (id: string) => {
   const p = PESTS.find((pest) => pest.id === id);
   if (p) return p;
   return EXTRA_PESTS[id];
-};
-
-const pestRiskModifiers = (state: GameState) => {
-  const m: Record<string, number> = { mites: 1, mold: 1, thrips: 1 };
-  const eff = researchEffects(state);
-  const general = Math.max(0, 1 - (eff.pest || 0));
-  m.mites *= general;
-  m.mold *= general;
-  m.thrips *= general;
-  if (eff.pest_mold) m.mold *= Math.max(0, 1 - eff.pest_mold);
-  const room = currentGrowRoom(state);
-  if (room && room.moldRisk) m.mold *= room.moldRisk;
-  for (const it of ITEMS) {
-    const own = state.itemsOwned[it.id] || 0;
-    if (!own || !it.effects?.pestReduce) continue;
-    for (const key of Object.keys(it.effects.pestReduce)) {
-      m[key] = (m[key] || 1) * Math.pow(it.effects.pestReduce[key]!, own);
-    }
-  }
-  return m;
 };
 
 const maybeSpawnPestFor = (state: GameState, plant: Plant, strain: Strain, dt: number, waterRatio: number, nutrientRatio: number) => {
@@ -917,57 +815,6 @@ const cleanExpiredOffers = (state: GameState) => {
   state.orders = (state.orders || []).filter((o: any) => o.expiresAt > now);
 };
 
-const currentMaxOffers = (state: GameState) => {
-  const extra = state.itemsOwned['van'] || 0;
-  return MAX_ACTIVE_OFFERS_BASE + extra;
-};
-
-const currentSpawnWindow = (state: GameState) => {
-  const vanDelta = (state.itemsOwned['van'] || 0) * 10;
-  const extraDelta = ITEMS.reduce((acc, it) => {
-    const owned = state.itemsOwned[it.id] || 0;
-    if (!owned || !it.effects?.spawnDelta) return acc;
-    return acc + it.effects.spawnDelta * owned;
-  }, 0);
-  const delta = vanDelta + extraDelta;
-  const min = Math.max(20, (OFFER_SPAWN_MIN || 45) - delta);
-  const max = Math.max(min + 5, (OFFER_SPAWN_MAX || 90) - delta);
-  return [min, max];
-};
-
-const spawnOffer = (state: GameState) => {
-  const scale = Math.max(1, Math.sqrt(Math.max(1, state.totalEarned)) / 20);
-  const grams = clamp(Math.floor(40 * scale + Math.random() * (400 * scale)), 20, 1000000);
-  const priceMult = 1.1 + Math.random() * 0.9;
-  const pricePerG = parseFloat((BASE_PRICE_PER_G * priceMult).toFixed(2));
-  const ttl = 60 + Math.floor(Math.random() * 120);
-  const id = String(Math.floor(Math.random() * 1e6));
-  state.offers.push({ id, grams, pricePerG, expiresAt: Date.now() + ttl * 1000 });
-};
-
-const spawnApothekenOffer = (state: GameState) => {
-  if (state.level < 4) return;
-  const scale = Math.max(1, Math.sqrt(Math.max(1, state.totalEarned)) / 20);
-  const grams = clamp(Math.floor(50 * scale + Math.random() * (300 * scale)), 30, 500000);
-  const priceMult = 1.2 + Math.random() * 1.0;
-  const pricePerG = parseFloat((BASE_PRICE_PER_G * priceMult).toFixed(2));
-  const ttl = 90 + Math.floor(Math.random() * 180);
-  const id = String(Math.floor(Math.random() * 1e6));
-  state.apothekenOffers = state.apothekenOffers || [];
-  state.apothekenOffers.push({ id, grams, pricePerG, expiresAt: Date.now() + ttl * 1000 });
-};
-
-const spawnOrder = (state: GameState) => {
-  const strain = STRAINS[Math.floor(Math.random() * STRAINS.length)];
-  const base = BASE_PRICE_PER_G * (state.marketMult || 1);
-  const pricePerG = parseFloat((base * (1.2 + Math.random() * 0.6)).toFixed(2));
-  const grams = Math.floor(50 + Math.random() * 250);
-  const ttl = 120 + Math.floor(Math.random() * 240);
-  const id = Math.floor(Math.random() * 1e6).toString();
-  state.orders = state.orders || [];
-  state.orders.push({ id, strainId: strain.id, grams, pricePerG, expiresAt: Date.now() + ttl * 1000 });
-};
-
 export const tickState = (state: GameState, realSeconds: number): GameState => {
   const speed = getTimeSpeed(state);
   const worldDt = Math.max(0, realSeconds * speed);
@@ -984,17 +831,17 @@ export const tickState = (state: GameState, realSeconds: number): GameState => {
     draft.nextOfferIn = Math.max(0, (draft.nextOfferIn || 0) - worldDt);
     draft.nextApothekenOfferIn = Math.max(0, (draft.nextApothekenOfferIn || 0) - worldDt);
     draft.nextOrderIn = Math.max(0, (draft.nextOrderIn || 0) - worldDt);
-    if (draft.nextOfferIn === 0 && (draft.offers?.length || 0) < currentMaxOffers(draft as any)) {
-      spawnOffer(draft as any);
-      const [min, max] = currentSpawnWindow(draft as any);
+    if (draft.nextOfferIn === 0 && (draft.offers?.length || 0) < currentMaxOffersForState(draft as any)) {
+      spawnOfferMarket(draft as any);
+      const [min, max] = currentSpawnWindowForState(draft as any);
       draft.nextOfferIn = min + Math.random() * (max - min);
     }
-    if (draft.nextApothekenOfferIn === 0 && (draft.apothekenOffers?.length || 0) < currentMaxOffers(draft as any)) {
-      spawnApothekenOffer(draft as any);
+    if (draft.nextApothekenOfferIn === 0 && (draft.apothekenOffers?.length || 0) < currentMaxOffersForState(draft as any)) {
+      spawnApothekenOfferMarket(draft as any);
       draft.nextApothekenOfferIn = Math.max(30, Math.random() * 60 + 30);
     }
     if (draft.nextOrderIn === 0 && (draft.orders?.length || 0) < 3) {
-      spawnOrder(draft as any);
+      spawnOrderMarket(draft as any);
       draft.nextOrderIn = 90 + Math.random() * 120;
     }
     cleanExpiredOffers(draft as any);
@@ -1022,25 +869,11 @@ export const tickState = (state: GameState, realSeconds: number): GameState => {
       const bonus = Math.floor(Math.random() * 50) + 10;
       draft.cash += bonus;
     }
-    marketDrift(draft as any, worldDt);
+    marketDriftLogic(draft as any, worldDt);
     if (draft.marketTimer > 0) draft.marketTimer = Math.max(0, draft.marketTimer - worldDt);
     if (draft.nextMarketEventIn > 0) draft.nextMarketEventIn = Math.max(0, draft.nextMarketEventIn - worldDt);
-    if (draft.nextMarketEventIn === 0 && draft.marketTimer === 0) spawnMarketEvent(draft as any);
-    draft.marketNewsTimer = Math.max(0, (draft.marketNewsTimer || 0) - worldDt);
-    if (draft.marketNewsTimer === 0 && Math.random() < 0.01 * worldDt) {
-      const ev = MARKET_NEWS[Math.floor(Math.random() * MARKET_NEWS.length)];
-      draft.marketNews = ev.name;
-      draft.marketNewsMult = ev.mult;
-      draft.marketNewsTimer = ev.duration;
-      draft.marketMult *= ev.mult;
-      pushMessage(draft as any, ev.name, 'info');
-    }
-    if (draft.marketNewsTimer === 0 && (draft.marketNewsMult !== 1 || draft.eventWaterMult !== 1)) {
-      draft.marketMult = draft.marketMult / (draft.marketNewsMult || 1);
-      draft.marketNewsMult = 1;
-      draft.marketNews = '';
-      draft.eventWaterMult = 1;
-    }
+    if (draft.nextMarketEventIn === 0 && draft.marketTimer === 0) spawnMarketEventLogic(draft as any);
+    maybeApplyRandomNews(draft as any, worldDt, pushMessage as any);
     const perSec = computePerSec(draft as any);
     draft.bestPerSec = Math.max(draft.bestPerSec, perSec);
   });
@@ -1054,7 +887,7 @@ export const tickState = (state: GameState, realSeconds: number): GameState => {
       draft.marketEventCooldown = Math.max(0, (draft.marketEventCooldown || 0) - 5);
       if ((draft.marketEventCooldown || 0) <= 0) {
         if (Math.random() < 0.3 && (draft.marketNewsTimer || 0) === 0) {
-          triggerMarketEvent(draft as any);
+          triggerMarketEventLogic(draft as any);
         }
         draft.marketEventCooldown = 300 + Math.random() * 300;
       }
@@ -1071,13 +904,7 @@ export const applyOfflineProgress = (state: GameState) => {
   return tickState(state, elapsed);
 };
 
-export const getSalePricePerGram = (state: GameState) => {
-  const base = BASE_PRICE_PER_G * (state.marketMult || 1) * (state.marketNewsMult || 1);
-  const mult = itemPriceMultiplier(state) * (state.marketTrendMult || 1);
-  const avgQ = (state.qualityPool.grams || 0) > 0 ? state.qualityPool.weighted / state.qualityPool.grams : 1;
-  const qMult = 1 + clamp(avgQ - 1, -0.6, 2);
-  return base * mult * qMult;
-};
+export const getSalePricePerGram = (state: GameState) => getSalePricePerGramMarket(state);
 
 export const calcPrestigeGain = (totalEarned: number) => Math.floor(Math.pow(totalEarned / 10000, 0.5));
 
@@ -1086,12 +913,7 @@ export const sellGrams = (state: GameState, grams: number) => {
   if (grams <= 0 || state.grams < grams) return state;
   const pricePerG = getSalePricePerGram(state);
   const cashGain = grams * pricePerG;
-  const next = produce(state, (draft) => {
-    draft.grams -= grams;
-    draft.cash += cashGain;
-    draft.totalCashEarned += cashGain;
-    draft.tradesDone = (draft.tradesDone || 0) + 1;
-  });
+  const next = sellGramsMarket(state, grams);
   return checkQuestProgress(checkQuestProgress(next, 'sell', { amount: grams }), 'cash', { amount: cashGain });
 };
 
@@ -1103,112 +925,61 @@ export const sellToBuyer = (state: GameState, grams: number, buyer: 'street' | '
   if (buyer === 'dispensary') mult = 1.15;
   const pricePerG = getSalePricePerGram(state) * mult;
   const cashGain = grams * pricePerG;
-  const next = produce(state, (draft) => {
-    draft.grams -= grams;
-    draft.cash += cashGain;
-    draft.totalCashEarned += cashGain;
-    draft.tradesDone = (draft.tradesDone || 0) + 1;
-  });
+  const next = sellToBuyerMarket(state, grams, buyer);
   return checkQuestProgress(checkQuestProgress(next, 'sell', { amount: grams }), 'cash', { amount: cashGain });
 };
 
 export const acceptOffer = (state: GameState, id: number | string) => {
-  const idx = state.offers.findIndex((o: any) => String(o.id) === String(id));
-  if (idx === -1) return state;
-  const offer: any = state.offers[idx];
+  const offer = state.offers.find((o: any) => String(o.id) === String(id));
+  if (!offer) return state;
   if (offer.expiresAt <= Date.now()) {
-    return produce(state, (draft) => {
-      draft.offers = draft.offers.filter((o: any) => String(o.id) !== String(id));
-    });
+    return declineOfferMarket(state, id);
   }
   if (state.grams < offer.grams) return state;
-  let totalCash = 0;
-  const next = produce(state, (draft) => {
-    const avgQ = (draft.qualityPool.grams || 0) > 0 ? draft.qualityPool.weighted / draft.qualityPool.grams : 1;
-    const qMult = saleQualityMultiplier(avgQ);
-    const total = offer.grams * offer.pricePerG * qMult;
-    totalCash = total;
-    draft.grams -= offer.grams;
-    const usedWeighted = Math.min(draft.qualityPool.weighted || 0, avgQ * offer.grams);
-    draft.qualityPool.grams = Math.max(0, (draft.qualityPool.grams || 0) - offer.grams);
-    draft.qualityPool.weighted = Math.max(0, (draft.qualityPool.weighted || 0) - usedWeighted);
-    draft.cash += total;
-    draft.totalCashEarned += total;
-    draft.tradesDone = (draft.tradesDone || 0) + 1;
-    draft.offers = draft.offers.filter((o: any) => String(o.id) !== String(id));
-    addXP(draft as any, 10);
-  });
-  return checkQuestProgress(checkQuestProgress(next, 'sell', { amount: offer.grams }), 'cash', { amount: totalCash });
+  const avgQ = (state.qualityPool.grams || 0) > 0 ? state.qualityPool.weighted / state.qualityPool.grams : 1;
+  const qMult = saleQualityMultiplier(avgQ);
+  const totalCash = offer.grams * offer.pricePerG * qMult;
+  const next = acceptOfferMarket(state, id);
+  const withXp = produce(next, (draft) => addXP(draft as any, 10));
+  return checkQuestProgress(checkQuestProgress(withXp, 'sell', { amount: offer.grams }), 'cash', { amount: totalCash });
 };
 
-export const declineOffer = (state: GameState, id: number | string) =>
-  produce(state, (draft) => {
-    draft.offers = (draft.offers || []).filter((o: any) => String(o.id) !== String(id));
-  });
+export const declineOffer = (state: GameState, id: number | string) => declineOfferMarket(state, id);
 
 export const deliverApotheke = (state: GameState, id: number | string) => {
-  const offers = state.apothekenOffers || [];
-  const idx = offers.findIndex((o: any) => String(o.id) === String(id));
-  if (idx === -1) return state;
-  const offer: any = offers[idx];
+  const offer = (state.apothekenOffers || []).find((o: any) => String(o.id) === String(id));
+  if (!offer) return state;
   if (offer.expiresAt <= Date.now()) {
     return produce(state, (draft) => {
       draft.apothekenOffers = (draft.apothekenOffers || []).filter((o: any) => String(o.id) !== String(id));
     });
   }
   if (state.grams < offer.grams) return state;
-  let totalCash = 0;
-  const next = produce(state, (draft) => {
-    const avgQ = (draft.qualityPool.grams || 0) > 0 ? draft.qualityPool.weighted / draft.qualityPool.grams : 1;
-    const qMult = saleQualityMultiplier(avgQ);
-    const total = offer.grams * offer.pricePerG * qMult;
-    totalCash = total;
-    draft.grams -= offer.grams;
-    const usedWeighted = Math.min(draft.qualityPool.weighted || 0, avgQ * offer.grams);
-    draft.qualityPool.grams = Math.max(0, (draft.qualityPool.grams || 0) - offer.grams);
-    draft.qualityPool.weighted = Math.max(0, (draft.qualityPool.weighted || 0) - usedWeighted);
-    draft.cash += total;
-    draft.totalCashEarned += total;
-    draft.tradesDone = (draft.tradesDone || 0) + 1;
-    draft.apothekenOffers = (draft.apothekenOffers || []).filter((o: any) => o.id !== id);
-    addXP(draft as any, 12);
-  });
-  return checkQuestProgress(checkQuestProgress(next, 'sell', { amount: offer.grams }), 'cash', { amount: totalCash });
+  const avgQ = (state.qualityPool.grams || 0) > 0 ? state.qualityPool.weighted / state.qualityPool.grams : 1;
+  const qMult = saleQualityMultiplier(avgQ);
+  const totalCash = offer.grams * offer.pricePerG * qMult;
+  const next = deliverApothekeMarket(state, id);
+  const withXp = produce(next, (draft) => addXP(draft as any, 12));
+  return checkQuestProgress(checkQuestProgress(withXp, 'sell', { amount: offer.grams }), 'cash', { amount: totalCash });
 };
 
-export const declineOrder = (state: GameState, id: number | string) =>
-  produce(state, (draft) => {
-    draft.orders = (draft.orders || []).filter((o: any) => String(o.id) !== String(id));
-  });
+export const declineOrder = (state: GameState, id: number | string) => declineOrderMarket(state, id);
 
 export const deliverOrder = (state: GameState, id: number | string) => {
-  const idx = state.orders.findIndex((o: any) => String(o.id) === String(id));
-  if (idx === -1) return state;
-  const order: any = state.orders[idx];
+  const order = state.orders.find((o: any) => String(o.id) === String(id));
+  if (!order) return state;
   if (order.expiresAt <= Date.now()) {
     return produce(state, (draft) => {
       draft.orders = draft.orders.filter((o: any) => String(o.id) !== String(id));
     });
   }
   if (state.grams < order.grams) return state;
-  let totalCash = 0;
-  const next = produce(state, (draft) => {
-    const avgQ = (draft.qualityPool.grams || 0) > 0 ? draft.qualityPool.weighted / draft.qualityPool.grams : 1;
-    const qMult = saleQualityMultiplier(avgQ);
-    const total = order.grams * order.pricePerG * qMult;
-    totalCash = total;
-    draft.grams -= order.grams;
-    const usedWeighted = Math.min(draft.qualityPool.weighted || 0, avgQ * order.grams);
-    draft.qualityPool.grams = Math.max(0, (draft.qualityPool.grams || 0) - order.grams);
-    draft.qualityPool.weighted = Math.max(0, (draft.qualityPool.weighted || 0) - usedWeighted);
-    draft.cash += total;
-    draft.totalCashEarned += total;
-    draft.tradesDone = (draft.tradesDone || 0) + 1;
-    draft.reputation = (draft.reputation || 0) + 1;
-    draft.orders = draft.orders.filter((o: any) => String(o.id) !== String(id));
-    addXP(draft as any, 12);
-  });
-  return checkQuestProgress(checkQuestProgress(next, 'sell', { amount: order.grams }), 'cash', { amount: totalCash });
+  const avgQ = (state.qualityPool.grams || 0) > 0 ? state.qualityPool.weighted / state.qualityPool.grams : 1;
+  const qMult = saleQualityMultiplier(avgQ);
+  const totalCash = order.grams * order.pricePerG * qMult;
+  const next = deliverOrderMarket(state, id);
+  const withXp = produce(next, (draft) => addXP(draft as any, 12));
+  return checkQuestProgress(checkQuestProgress(withXp, 'sell', { amount: order.grams }), 'cash', { amount: totalCash });
 };
 
 export const doPrestige = (state: GameState) => {
@@ -1302,13 +1073,6 @@ const addXP = (state: GameState, amt: number) => {
   }
 };
 
-export const xpForNext = (level: number) => {
-  level = Math.max(1, level || 1);
-  return Math.floor(100 * Math.pow(1.35, level - 1));
-};
-
-const clampQualityValue = (q: number) => clamp(q, 0.4, CURING_QUALITY_CAP);
-
 const syncQuests = (state: GameState) => {
   ensureQuestState(state);
   const level = state.level || 1;
@@ -1356,16 +1120,6 @@ const checkAchievements = (state: GameState) => {
     }
   }
   return unlocked;
-};
-
-const triggerMarketEvent = (state: GameState) => {
-  const ev = MARKET_EVENTS[Math.floor(Math.random() * MARKET_EVENTS.length)];
-  state.marketNews = ev.name;
-  state.marketNewsMult = ev.type === 'festival' ? 1.2 : 1;
-  state.marketNewsTimer = ev.duration;
-  if (ev.type === 'festival') state.marketMult *= 1.2;
-  if (ev.type === 'heatwave') state.eventWaterMult = 1.5;
-  pushMessage(state, `${ev.name}: ${ev.desc}`, 'event');
 };
 
 const applyQuestRewards = (state: GameState, questId: string) => {
@@ -1456,163 +1210,18 @@ export const claimQuestReward = (state: GameState, questId: string) => {
   });
 };
 
-const fillDryingSlots = (proc: ProcessingState) => {
-  while ((proc.drying || []).length < (proc.slots?.drying || 0) && (proc.wet || []).length > 0) {
-    const wet = proc.wet.shift();
-    if (!wet) break;
-    proc.drying.push({
-      id: wet.id,
-      strainId: wet.strainId,
-      wetGrams: wet.grams,
-      quality: wet.quality,
-      remaining: DRYING_TIME_SEC,
-      total: DRYING_TIME_SEC,
-      startedAt: Date.now()
-    });
-  }
-};
+export const startDrying = (state: GameState, batchId?: string) => startDryingProcessing(state, batchId);
 
-const advanceProcessing = (state: GameState, worldDt: number) => {
-  if (worldDt <= 0) return;
-  const proc = ensureProcessing(state);
-  proc.drying = (proc.drying || []).filter((job) => {
-    job.remaining = Math.max(0, job.remaining - worldDt);
-    if (job.remaining <= 0) {
-      const grams = Math.max(0, job.wetGrams * DRY_WEIGHT_MULT);
-      const q = clampQualityValue(job.quality * DRY_PRICE_MULT);
-      proc.ready.push({ id: job.id, strainId: job.strainId, grams, quality: q, stage: 'dry', createdAt: Date.now() });
-      return false;
-    }
-    return true;
-  });
+export const startCuring = (state: GameState, batchId: string) => startCuringProcessing(state, batchId);
 
-  proc.curing = (proc.curing || []).filter((job) => {
-    const total = job.total || CURING_TIME_SEC;
-    const startQ = job.startQuality ?? job.quality;
-    job.remaining = Math.max(0, job.remaining - worldDt);
-    const progress = clamp(1 - job.remaining / total, 0, 1);
-    job.quality = clampQualityValue(startQ + (job.targetQuality - startQ) * progress);
-    if (job.remaining <= 0) {
-      proc.ready.push({
-        id: job.id,
-        strainId: job.strainId,
-        grams: job.grams,
-        quality: job.targetQuality,
-        stage: 'cured',
-        createdAt: Date.now()
-      });
-      return false;
-    }
-    return true;
-  });
+export const collectProcessed = (state: GameState, batchId: string) =>
+  collectProcessedProcessing(state, batchId, { addXP });
 
-  fillDryingSlots(proc);
-};
+export const collectAllProcessed = (state: GameState) =>
+  collectAllProcessedProcessing(state, { addXP });
 
-export const startDrying = (state: GameState, batchId?: string) => {
-  const proc = ensureProcessing(state);
-  const hasSpace = (proc.slots?.drying || 0) > (proc.drying || []).length;
-  if (!hasSpace || (proc.wet || []).length === 0) return state;
-  return produce(state, (draft) => {
-    const p = ensureProcessing(draft);
-    if (!batchId) {
-      fillDryingSlots(p);
-      return;
-    }
-    const idx = batchId ? p.wet.findIndex((b) => b.id === batchId) : 0;
-    if (idx === -1) return;
-    const wet = p.wet.splice(idx, 1)[0];
-    if (!wet) return;
-    p.drying.push({
-      id: wet.id,
-      strainId: wet.strainId,
-      wetGrams: wet.grams,
-      quality: wet.quality,
-      remaining: DRYING_TIME_SEC,
-      total: DRYING_TIME_SEC,
-      startedAt: Date.now()
-    });
-  });
-};
-
-export const startCuring = (state: GameState, batchId: string) => {
-  const proc = ensureProcessing(state);
-  if ((proc.curing || []).length >= (proc.slots?.curing || 0)) return state;
-  const readyIdx = (proc.ready || []).findIndex((b) => b.id === batchId && b.stage === 'dry');
-  if (readyIdx === -1) return state;
-  return produce(state, (draft) => {
-    const p = ensureProcessing(draft);
-    const idx = (p.ready || []).findIndex((b) => b.id === batchId && b.stage === 'dry');
-    if (idx === -1) return;
-    const batch = p.ready.splice(idx, 1)[0];
-    const duration = CURING_TIME_SEC;
-    const target = clampQualityValue(batch.quality * (1 + CURING_QUALITY_BONUS));
-    p.curing.push({
-      id: batch.id,
-      strainId: batch.strainId,
-      grams: batch.grams,
-      quality: batch.quality,
-      startQuality: batch.quality,
-      targetQuality: target,
-      remaining: duration,
-      total: duration,
-      startedAt: Date.now()
-    });
-  });
-};
-
-export const collectProcessed = (state: GameState, batchId: string) => {
-  const proc = ensureProcessing(state);
-  const idx = (proc.ready || []).findIndex((b) => b.id === batchId);
-  if (idx === -1) return state;
-  return produce(state, (draft) => {
-    const p = ensureProcessing(draft);
-    const i = (p.ready || []).findIndex((b) => b.id === batchId);
-    if (i === -1) return;
-    const batch = p.ready.splice(i, 1)[0];
-    const q = clampQualityValue(batch.quality);
-    draft.grams += batch.grams;
-    draft.totalEarned += batch.grams;
-    draft.qualityPool.grams = (draft.qualityPool.grams || 0) + batch.grams;
-    draft.qualityPool.weighted = (draft.qualityPool.weighted || 0) + batch.grams * q;
-    addXP(draft as any, Math.max(1, Math.floor(batch.grams / 40)));
-  });
-};
-
-export const collectAllProcessed = (state: GameState) => {
-  const proc = ensureProcessing(state);
-  if ((proc.ready || []).length === 0) return state;
-  return produce(state, (draft) => {
-    const p = ensureProcessing(draft);
-    for (const batch of p.ready) {
-      const q = clampQualityValue(batch.quality);
-      draft.grams += batch.grams;
-      draft.totalEarned += batch.grams;
-      draft.qualityPool.grams = (draft.qualityPool.grams || 0) + batch.grams;
-      draft.qualityPool.weighted = (draft.qualityPool.weighted || 0) + batch.grams * q;
-      addXP(draft as any, Math.max(1, Math.floor(batch.grams / 40)));
-    }
-    p.ready = [];
-  });
-};
-
-export const pressRosin = (state: GameState, batchId: string) => {
-  const proc = ensureProcessing(state);
-  const idx = (proc.ready || []).findIndex((b) => b.id === batchId);
-  if (idx === -1) return state;
-  const batch = proc.ready[idx];
-  if ((batch.quality || 0) >= ROSIN_MIN_QUALITY) return state;
-  return produce(state, (draft) => {
-    const p = ensureProcessing(draft);
-    const i = (p.ready || []).findIndex((b) => b.id === batchId);
-    if (i === -1) return;
-    const b = p.ready.splice(i, 1)[0];
-    const output = Math.max(0, b.grams * ROSIN_YIELD_MULT);
-    draft.concentrates = (draft.concentrates || 0) + output;
-    addXP(draft as any, Math.max(1, Math.floor(output / 5)));
-    pushMessage(draft as any, `Rosin gewonnen: ${fmtNumber(output)}g`, 'success');
-  });
-};
+export const pressRosin = (state: GameState, batchId: string) =>
+  pressRosinProcessing(state, batchId, { addXP, pushMessage });
 
 export const harvestPlant = (state: GameState, slotIndex: number) => {
   const idx = state.plants.findIndex((p) => p.slot === slotIndex);
@@ -1912,16 +1521,6 @@ export const buySeed = (state: GameState, strainId: string) => {
   });
 };
 
-export const seedCost = (state: GameState, strainId: string, currentCount?: number) => {
-  const strain = STRAINS.find((s) => s.id === strainId);
-  if (!strain) return 0;
-  const count = typeof currentCount === 'number' ? currentCount : state.purchasedCount[strainId] || 0;
-  let cost = Math.round(strain.cost * Math.pow(1.18, count));
-  const eff = researchEffects(state);
-  cost = Math.max(1, Math.round(cost * (1 - (eff.cost || 0))));
-  return cost;
-};
-
 export const upgradePlant = (state: GameState, slotIndex: number) => {
   const plant = state.plants.find((p) => p.slot === slotIndex);
   if (!plant) return state;
@@ -1946,15 +1545,6 @@ export const buyItem = (state: GameState, itemId: string) => {
     draft.cash -= cost;
     draft.itemsOwned[itemId] = (draft.itemsOwned[itemId] || 0) + 1;
   });
-};
-
-export const itemCost = (state: GameState, itemId: string) => {
-  const item = ITEMS.find((i) => i.id === itemId);
-  if (!item) return 0;
-  const count = state.itemsOwned[itemId] || 0;
-  const eff = researchEffects(state);
-  const base = item.cost * Math.pow(1.2, count);
-  return Math.max(1, Math.round(base * (1 - (eff.cost || 0))));
 };
 
 export const buyConsumablePack = (state: GameState, packId: string) => {
@@ -2024,32 +1614,6 @@ const rarityEmoji = (rarity: Rarity) => {
     default:
       return '❔';
   }
-};
-
-const spawnMarketEvent = (state: GameState) => {
-  const roll = Math.random();
-  if (roll < 0.5) {
-    state.marketEventName = 'Inspektion';
-    state.marketMult = 0.7;
-    state.marketTimer = 30;
-  } else {
-    state.marketEventName = 'Hype';
-    state.marketMult = 1.25;
-    state.marketTimer = 30;
-  }
-  state.nextMarketEventIn = 90 + Math.random() * 60;
-};
-
-const marketDrift = (state: GameState, dt: number) => {
-  state.nextMarketShiftIn = Math.max(0, (state.nextMarketShiftIn || 0) - dt);
-  if ((state.nextMarketShiftIn || 0) > 0) return;
-  const trend = MARKET_TRENDS[Math.floor(Math.random() * MARKET_TRENDS.length)];
-  state.marketTrendName = trend.name;
-  state.marketTrendMult = trend.mult;
-  state.marketTrend = trend.mult > 1 ? 'up' : trend.mult < 1 ? 'down' : 'stable';
-  state.nextMarketShiftIn = 600; // alle 10 Minuten
-  const price = getSalePricePerGram(state);
-  state.priceHistory = (state.priceHistory || []).slice(-19).concat(price);
 };
 
 const spawnRandomEvent = (state: GameState) => {
@@ -2237,22 +1801,12 @@ export const formatResources = (state: GameState) => ({
   xpNeed: xpForNext(state.level || 1)
 });
 
-export const DRYING_TIME = DRYING_TIME_SEC;
-export const CURING_TIME = CURING_TIME_SEC;
-export const DRY_WEIGHT_MULTIPLIER = DRY_WEIGHT_MULT;
-export const DRY_PRICE_MULTIPLIER = DRY_PRICE_MULT;
+export { DRYING_TIME, CURING_TIME, DRY_WEIGHT_MULTIPLIER, DRY_PRICE_MULTIPLIER } from './logic/processing';
 export const WATER_COST_PER_USE = WATER_COST;
 
 export { SAVE_KEY };
 
 // --- Upgrades / Estate / Research / Staff / Breeding ---
-
-export const upgradeCost = (state: GameState, id: string) => {
-  const up = GLOBAL_UPGRADES.find((u) => u.id === id);
-  if (!up) return 0;
-  const lvl = state.upgrades[id] || 0;
-  return Math.round(up.baseCost * Math.pow(1.6, lvl));
-};
 
 export const buyUpgrade = (state: GameState, id: string) => {
   const cost = upgradeCost(state, id);
