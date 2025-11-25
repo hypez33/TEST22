@@ -24,6 +24,7 @@ import { SettingsTab } from './components/tabs/SettingsTab';
 import { ProcessingTab } from './components/tabs/ProcessingTab';
 import { ToastHost, pushToast } from './components/ui/ToastHost';
 import { FloatingTextLayer } from './components/ui/FloatingTextLayer';
+import { ClickEffects } from './components/ui/ClickEffects';
 
 const TABS = [
   { id: 'farm', label: 'Farm', icon: 'fi fi-sr-leaf' },
@@ -135,6 +136,7 @@ export default function Page() {
         <span className="orb"></span>
         <span className="orb"></span>
       </div>
+      <ClickEffects />
       <FloatingTextLayer />
       <ToastHost />
       <HeaderHUD state={state} perSec={derived.perSec} onSpeedChange={actions.setSpeed} gameClock={gameClock} />

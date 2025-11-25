@@ -1078,6 +1078,11 @@ export const acceptOffer = (state: GameState, id: number | string) => {
   return checkQuestProgress(checkQuestProgress(next, 'sell', { amount: offer.grams }), 'cash', { amount: totalCash });
 };
 
+export const declineOffer = (state: GameState, id: number | string) =>
+  produce(state, (draft) => {
+    draft.offers = (draft.offers || []).filter((o: any) => String(o.id) !== String(id));
+  });
+
 export const deliverApotheke = (state: GameState, id: number | string) => {
   const offers = state.apothekenOffers || [];
   const idx = offers.findIndex((o: any) => String(o.id) === String(id));
@@ -1107,6 +1112,11 @@ export const deliverApotheke = (state: GameState, id: number | string) => {
   });
   return checkQuestProgress(checkQuestProgress(next, 'sell', { amount: offer.grams }), 'cash', { amount: totalCash });
 };
+
+export const declineOrder = (state: GameState, id: number | string) =>
+  produce(state, (draft) => {
+    draft.orders = (draft.orders || []).filter((o: any) => String(o.id) !== String(id));
+  });
 
 export const deliverOrder = (state: GameState, id: number | string) => {
   const idx = state.orders.findIndex((o: any) => String(o.id) === String(id));

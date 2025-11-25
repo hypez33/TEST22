@@ -20,6 +20,7 @@ type InventoryRow = {
   value: number;
   desc?: string;
   rarity?: string;
+  effects?: string[];
 };
 
 export function InventoryTab({ state, actions }: Props) {
@@ -30,11 +31,49 @@ export function InventoryTab({ state, actions }: Props) {
   const strains = getAllStrains(state);
   for (const [id, qty] of Object.entries(state.seeds || {})) {
     const strain = strains.find((s) => s.id === id);
-    rows.push({ id, name: strain?.name || id, kind: 'seed', qty, value: seedCost(state, id), desc: strain?.desc, rarity: strain?.rarity });
+    const effects = [];
+    if (strain?.yield) effects.push(`Ertrag: ~${fmtNumber(strain.yield)}g`);
+    if (strain?.grow) effects.push(`Wachstum: ${Math.round(strain.grow)}s`);
+    if (strain?.quality) effects.push(`Qualität x${strain.quality}`);
+    rows.push({
+      id,
+      name: strain?.name || id,
+      kind: 'seed',
+      qty,
+      value: seedCost(state, id),
+      desc: strain?.desc,
+      rarity: strain?.rarity,
+      effects
+    });
   }
+  const formatEffects = (eff: any = {}) => {
+    const res: string[] = [];
+    if (eff.priceMult) res.push(`Preis +${Math.round((eff.priceMult - 1) * 100)}%`);
+    if (eff.yieldMult) res.push(`Ertrag +${Math.round((eff.yieldMult - 1) * 100)}%`);
+    if (eff.growthMult) res.push(`Wachstum +${Math.round((eff.growthMult - 1) * 100)}%`);
+    if (eff.qualityMult) res.push(`Qualität +${Math.round((eff.qualityMult - 1) * 100)}%`);
+    if (eff.nutrientBoost) res.push(`Nährstoffe +${Math.round(eff.nutrientBoost * 100)}%`);
+    if (eff.offerSlot) res.push(`+${eff.offerSlot} Angebot`);
+    if (eff.spawnDelta) res.push(`Spawn -${eff.spawnDelta}s`);
+    if (eff.pestReduce) {
+      const parts = Object.entries(eff.pestReduce).map(([k, v]) => `${k} -${Math.round((1 - (v as number)) * 100)}%`);
+      res.push(`Schädlinge: ${parts.join(', ')}`);
+    }
+    return res;
+  };
+
   for (const item of ITEMS) {
     const qty = state.itemsOwned[item.id] || 0;
-    rows.push({ id: item.id, name: item.name, kind: 'item', qty, value: itemCost(state, item.id), desc: item.desc });
+    rows.push({
+      id: item.id,
+      name: item.name,
+      kind: 'item',
+      qty,
+      value: itemCost(state, item.id),
+      desc: item.desc,
+      rarity: item.rarity || 'common',
+      effects: formatEffects(item.effects)
+    });
   }
   for (const pack of CONSUMABLE_PACKS) {
     const qty =
@@ -44,7 +83,16 @@ export function InventoryTab({ state, actions }: Props) {
       (pack.add.fungicide || 0) +
       (pack.add.beneficials || 0) +
       (pack.add.coffee || 0);
-    rows.push({ id: pack.id, name: pack.name, kind: 'consumable', qty, value: pack.price, desc: pack.desc });
+    rows.push({
+      id: pack.id,
+      name: pack.name,
+      kind: 'consumable',
+      qty,
+      value: pack.price,
+      desc: pack.desc,
+      rarity: 'common',
+      effects: formatEffects(pack.add)
+    });
   }
 
   const filtered = rows.filter((r) => (filter === 'all' ? true : r.kind === filter));
@@ -68,17 +116,17 @@ export function InventoryTab({ state, actions }: Props) {
           <span className="hint">Verwalte deine Gegenstände</span>
         </div>
         <div className="inventory-toolbar">
-          <div className="chip-group" id="inventoryFilter">
-            <button className={`chip small ${filter === 'all' ? 'active' : ''}`} onClick={() => actions.setInventoryFilters('all', sort)}>
+          <div className="inventory-tabs">
+            <button className={`inv-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => actions.setInventoryFilters('all', sort)}>
               Alle
             </button>
-            <button className={`chip small ${filter === 'item' ? 'active' : ''}`} onClick={() => actions.setInventoryFilters('item', sort)}>
+            <button className={`inv-tab ${filter === 'item' ? 'active' : ''}`} onClick={() => actions.setInventoryFilters('item', sort)}>
               Ausrüstung
             </button>
-            <button className={`chip small ${filter === 'seed' ? 'active' : ''}`} onClick={() => actions.setInventoryFilters('seed', sort)}>
+            <button className={`inv-tab ${filter === 'seed' ? 'active' : ''}`} onClick={() => actions.setInventoryFilters('seed', sort)}>
               Samen
             </button>
-            <button className={`chip small ${filter === 'consumable' ? 'active' : ''}`} onClick={() => actions.setInventoryFilters('consumable', sort)}>
+            <button className={`inv-tab ${filter === 'consumable' ? 'active' : ''}`} onClick={() => actions.setInventoryFilters('consumable', sort)}>
               Verbrauch
             </button>
           </div>
@@ -97,27 +145,47 @@ export function InventoryTab({ state, actions }: Props) {
             </button>
           </div>
         </div>
-        <div className="inventory-list">
-          {filtered.length === 0 && <div className="placeholder">Noch nichts gesammelt.</div>}
-          {filtered.map((row) => (
-            <div key={`${row.kind}-${row.id}`} className="inventory-item">
-              <Tooltip content={row.desc || row.name}>
-                <div className="inventory-name">
-                  {row.name} <span className="pill muted">{row.kind}</span>
+        <div className="inventory-grid">
+          {filtered.length === 0 && <div className="placeholder slot-placeholder">Noch nichts gesammelt.</div>}
+          {filtered.map((row) => {
+            const rarity = (row.rarity || 'common').toLowerCase();
+            const tooltip = (
+              <div className="inv-tooltip">
+                <div className="inv-tip-name">{row.name}</div>
+                <div className="inv-tip-kind">{row.kind === 'seed' ? 'Samen' : row.kind === 'item' ? 'Ausrüstung' : 'Verbrauch'}</div>
+                {row.desc && <div className="inv-tip-desc">{row.desc}</div>}
+                {row.effects && row.effects.length > 0 && (
+                  <div className="inv-tip-effects">
+                    {row.effects.map((e, i) => (
+                      <div key={i}>• {e}</div>
+                    ))}
+                  </div>
+                )}
+                <div className="inv-tip-value">Wert: {fmtNumber(row.value)} $</div>
+              </div>
+            );
+            return (
+              <Tooltip key={`${row.kind}-${row.id}`} content={tooltip}>
+                <div className={`inventory-slot rarity-${rarity}`}>
+                  <div className="slot-top">
+                    <span className="slot-kind">{row.kind === 'seed' ? 'Samen' : row.kind === 'item' ? 'Gear' : 'Verbrauch'}</span>
+                    <span className="slot-qty">x{row.qty}</span>
+                  </div>
+                  <div className="slot-name">{row.name}</div>
+                  <div className="slot-desc">{row.desc}</div>
+                  {row.effects && row.effects.length > 0 && <div className="slot-effects">{row.effects.join(' · ')}</div>}
+                  <div className="slot-footer">
+                    <span className="slot-value">{fmtNumber(row.value)} $</span>
+                    {row.kind === 'seed' && actions.toggleFavorite && (
+                      <button className="chip tiny" type="button" onClick={() => actions.toggleFavorite!(row.id)}>
+                        {state.favorites?.includes(row.id) ? '★ Favorit' : '☆ Favorit'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </Tooltip>
-              <div className="inventory-desc">{row.desc}</div>
-              <div className="inventory-meta">
-                <span>Menge: {row.qty}</span>
-                <span>Wert: {fmtNumber(row.value)}</span>
-                {row.kind === 'seed' && actions.toggleFavorite && (
-                  <button className="chip small" type="button" onClick={() => actions.toggleFavorite!(row.id)}>
-                    Favorit {state.favorites?.includes(row.id) ? '★' : '☆'}
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>

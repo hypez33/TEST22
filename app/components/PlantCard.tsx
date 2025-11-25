@@ -7,6 +7,7 @@ import { fmtNumber, formatTimer } from '@/lib/game/utils';
 import { GameState, Plant, Strain } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
 import { emitFloatingText } from './ui/FloatingTextLayer';
+import { emitClickParticles } from './ui/ClickEffects';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSound } from '../hooks/useSound';
@@ -55,12 +56,12 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
   const nutrientLow = nutrientPct < 20;
   const isGrowing = !ready && !isWilted;
 
-  const showFloat = (text: string, e: React.MouseEvent, tone: 'gain' | 'loss' | 'info' = 'gain') => {
+  const showFloat = (text: string, e: React.MouseEvent, tone: 'gain' | 'loss' | 'info' | 'crit' = 'gain') => {
     lastPointer.current = { x: e.clientX, y: e.clientY };
     emitFloatingText(text, e.clientX, e.clientY, tone);
   };
 
-  const showFloatFromPointer = (text: string, tone: 'gain' | 'loss' | 'info' = 'gain') => {
+  const showFloatFromPointer = (text: string, tone: 'gain' | 'loss' | 'info' | 'crit' = 'gain') => {
     emitFloatingText(text, lastPointer.current.x, lastPointer.current.y, tone);
   };
 
@@ -69,11 +70,13 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
     if (!miniGamesEnabled || autoSkipMiniGame || masteryLevel >= 10) {
       actions.harvestPlant(plant.slot);
       showFloat(`+${fmtNumber(wetYield)}g Nass`, e, 'gain');
+      emitClickParticles({ x: e.clientX, y: e.clientY, kind: 'leaf', count: 12 });
       harvestSound.play();
       setFlashAction('harvest');
       return;
     }
     lastPointer.current = { x: e.clientX, y: e.clientY };
+    emitClickParticles({ x: e.clientX, y: e.clientY, kind: 'leaf', count: 10 });
     setFlashAction('harvest');
     setMiniGame({ type: 'harvest', slot: plant.slot });
   };
@@ -266,7 +269,9 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
             if (miniGame.type === 'harvest') {
               actions.harvestPlantWithBonus?.(miniGame.slot, bonus);
               const yieldAmount = harvestYieldFor(state, plant) * qualityMultiplier(state, plant) * bonus;
-              showFloatFromPointer(`+${fmtNumber(yieldAmount)}g Nass`, 'gain');
+              const tone = bonus >= 1.4 ? 'crit' : 'gain';
+              showFloatFromPointer(`+${fmtNumber(yieldAmount)}g Nass`, tone as any);
+              emitClickParticles({ x: lastPointer.current.x, y: lastPointer.current.y, kind: 'leaf', count: bonus >= 1.4 ? 16 : 10 });
               harvestSound.play();
             } else if (miniGame.type === 'water') {
               actions.waterPlant(miniGame.slot);
