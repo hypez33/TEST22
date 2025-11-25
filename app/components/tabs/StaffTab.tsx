@@ -15,7 +15,7 @@ export function StaffTab({ state, actions }: Props) {
           <h2>Mitarbeiter</h2>
           <span className="hint">Stelle Angestellte ein, um Aufgaben zu automatisieren</span>
         </div>
-        <div className="upgrade-list">
+        <div className="responsive-grid upgrade-list">
           {EMPLOYEES.map((emp) => {
             const data = (state.employees as any)[emp.id] || {};
             const hired = !!data.hired;

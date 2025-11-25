@@ -23,7 +23,7 @@ export function ResearchTab({ state, actions }: Props) {
             Aktive Boni – Ertrag +{Math.round(eff.yield * 100)}%, Wachstum +{Math.round(eff.growth * 100)}%, Qualität +{Math.round(eff.quality * 100)}%, Risiko -{Math.round(eff.pest * 100)}%
           </div>
         </div>
-        <div className="research-list">
+        <div className="responsive-grid research-list">
           {Object.entries(RESEARCH_TREE).map(([branchKey, branch]) => (
             <div key={branchKey} className="research-branch">
               <div className="branch-head">

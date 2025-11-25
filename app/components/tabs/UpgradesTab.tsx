@@ -16,7 +16,7 @@ export function UpgradesTab({ state, actions }: Props) {
           <h2>🚀 Globale Upgrades</h2>
           <span className="hint">Verbessert alle Pflanzen</span>
         </div>
-        <div className="upgrade-list">
+        <div className="responsive-grid upgrade-list">
           {GLOBAL_UPGRADES.map((up) => {
             const lvl = state.upgrades[up.id] || 0;
             const cost = upgradeCost(state, up.id);

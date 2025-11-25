@@ -99,10 +99,12 @@ export const createInitialState = (): GameState => ({
   marketNews: '',
   marketNewsTimer: 0,
   marketNewsMult: 1,
+  eventWaterMult: 1,
   quests: [],
   activeQuests: [],
   completedQuests: [],
   unlockedAchievements: [],
+  autoGrow: {},
   processing: { wet: [], drying: [], curing: [], ready: [], slots: { drying: 2, curing: 2 } },
   difficulty: 'normal',
   marketMult: 1,
@@ -110,6 +112,7 @@ export const createInitialState = (): GameState => ({
   nextMarketShiftIn: 90,
   marketTimer: 0,
   marketEventName: '',
+  marketEventCooldown: 300,
   apothekenOffers: [],
   research: {},
   reputation: 0,
@@ -142,6 +145,7 @@ export const createInitialState = (): GameState => ({
   favorites: [],
   bulkConserve: false,
   soundFx: true,
+  strainMastery: {},
   breedingSlots: { parent1: null, parent2: null },
   _empTimer: 0,
   _achTimer: 0
@@ -182,6 +186,33 @@ const MARKET_NEWS = [
   { name: 'Große Ernteflut! Preise sinken', mult: 0.85, duration: 240 },
   { name: 'Medizinischer Boom', mult: 1.15, duration: 360 }
 ];
+
+const MARKET_EVENTS = [
+  { type: 'heatwave', name: 'Hitzewelle', desc: 'Wasserverbrauch +50%', duration: 300 },
+  { type: 'festival', name: 'Festival in der Stadt', desc: 'Preise +20%', duration: 600 }
+];
+
+const masteryLevel = (xp: number) => {
+  if (xp >= 1000) return 10;
+  if (xp >= 600) return 7;
+  if (xp >= 300) return 5;
+  if (xp >= 120) return 3;
+  if (xp >= 60) return 2;
+  if (xp >= 30) return 1;
+  return 0;
+};
+
+const addMasteryXp = (state: GameState, strainId: string, xp: number) => {
+  state.strainMastery = state.strainMastery || {};
+  state.strainMastery[strainId] = (state.strainMastery[strainId] || 0) + xp;
+};
+
+const masteryForStrain = (state: GameState, strainId: string) => {
+  const xp = (state.strainMastery || {})[strainId] || 0;
+  return { xp, level: masteryLevel(xp) };
+};
+
+export const masteryLevelFor = masteryLevel;
 
 const ensureProcessing = (state: any): ProcessingState => {
   const normalize = (source?: Partial<ProcessingState>): ProcessingState => {
@@ -232,6 +263,8 @@ const migrateState = (draft: GameState) => {
   if (!Array.isArray(draft.priceHistory)) draft.priceHistory = [];
   if (typeof draft.marketNewsMult !== 'number') draft.marketNewsMult = 1;
   draft.soundFx = typeof draft.soundFx === 'boolean' ? draft.soundFx : true;
+  draft.strainMastery = draft.strainMastery || {};
+  draft.autoGrow = draft.autoGrow || {};
   draft._achTimer = draft._achTimer || 0;
 };
 
@@ -416,7 +449,9 @@ export const growTimeFor = (state: GameState, plant: Plant) => {
   const base = strain.grow || 180;
   const res = researchEffects(state);
   const mod = 1 + (res.growthTime || 0);
-  return base * mod;
+  const mastery = masteryForStrain(state, plant.strainId);
+  const masteryReduce = mastery.level >= 5 ? 0.9 : 1;
+  return base * mod * masteryReduce;
 };
 
 const plantUpgradeCost = (state: GameState, plant: Plant) => {
@@ -430,7 +465,9 @@ export const harvestYieldFor = (state: GameState, plant: Plant) => {
   const levelMult = Math.pow(1.12, Math.max(0, plant.level - 1));
   const res = researchEffects(state);
   const bonus = state.harvestBonus || 1;
-  return base * levelMult * (1 + (res.yield || 0)) * globalMultiplier(state) * bonus;
+  const mastery = masteryForStrain(state, plant.strainId);
+  const masteryYield = mastery.level >= 1 ? 1.05 : 1;
+  return base * levelMult * (1 + (res.yield || 0)) * globalMultiplier(state) * bonus * masteryYield;
 };
 
 const globalQualityPenalty = (state: GameState) => {
@@ -554,7 +591,8 @@ const advancePlant = (state: GameState, plant: Plant, delta: number) => {
   while (remaining > 0) {
     const step = Math.min(remaining, 1);
     const res = researchEffects(state);
-    plant.water = clamp(plant.water - WATER_DRAIN_PER_SEC * (1 - (res.water || 0)) * step, 0, WATER_MAX);
+    const waterMult = state.eventWaterMult || 1;
+    plant.water = clamp(plant.water - WATER_DRAIN_PER_SEC * waterMult * (1 - (res.water || 0)) * step, 0, WATER_MAX);
     plant.nutrients = clamp(plant.nutrients - NUTRIENT_DRAIN_PER_SEC * step, 0, NUTRIENT_MAX);
 
     const waterRatio = plant.water / WATER_MAX;
@@ -927,10 +965,11 @@ export const tickState = (state: GameState, realSeconds: number): GameState => {
       draft.marketMult *= ev.mult;
       pushMessage(draft as any, ev.name, 'info');
     }
-    if (draft.marketNewsTimer === 0 && draft.marketNewsMult !== 1) {
+    if (draft.marketNewsTimer === 0 && (draft.marketNewsMult !== 1 || draft.eventWaterMult !== 1)) {
       draft.marketMult = draft.marketMult / (draft.marketNewsMult || 1);
       draft.marketNewsMult = 1;
       draft.marketNews = '';
+      draft.eventWaterMult = 1;
     }
     const perSec = computePerSec(draft as any);
     draft.bestPerSec = Math.max(draft.bestPerSec, perSec);
@@ -942,6 +981,13 @@ export const tickState = (state: GameState, realSeconds: number): GameState => {
     next = produce(next, (draft) => {
       draft._achTimer = 0;
       checkAchievements(draft as any);
+      draft.marketEventCooldown = Math.max(0, (draft.marketEventCooldown || 0) - 5);
+      if ((draft.marketEventCooldown || 0) <= 0) {
+        if (Math.random() < 0.3 && (draft.marketNewsTimer || 0) === 0) {
+          triggerMarketEvent(draft as any);
+        }
+        draft.marketEventCooldown = 300 + Math.random() * 300;
+      }
     });
   }
   next = advanceQuest(next);
@@ -1232,6 +1278,16 @@ const checkAchievements = (state: GameState) => {
   return unlocked;
 };
 
+const triggerMarketEvent = (state: GameState) => {
+  const ev = MARKET_EVENTS[Math.floor(Math.random() * MARKET_EVENTS.length)];
+  state.marketNews = ev.name;
+  state.marketNewsMult = ev.type === 'festival' ? 1.2 : 1;
+  state.marketNewsTimer = ev.duration;
+  if (ev.type === 'festival') state.marketMult *= 1.2;
+  if (ev.type === 'heatwave') state.eventWaterMult = 1.5;
+  pushMessage(state, `${ev.name}: ${ev.desc}`, 'event');
+};
+
 const applyQuestRewards = (state: GameState, questId: string) => {
   const quest = QUESTS.find((q) => q.id === questId);
   if (!quest) return;
@@ -1485,15 +1541,22 @@ export const harvestPlant = (state: GameState, slotIndex: number) => {
   if (plant.growProg < 1) return state;
   if ((state.itemsOwned['shears'] || 0) <= 0) return state;
   const qm = qualityMultiplier(state, plant);
+  const mastery = masteryForStrain(state, plant.strainId);
+  const qBonus = mastery.level >= 10 && Math.random() < 0.15 ? qm * 2 : qm;
   const gain = harvestYieldFor(state, plant) * qm;
   const dryEstimate = gain * DRY_WEIGHT_MULT;
   const next = produce(state, (draft) => {
+    addMasteryXp(draft as any, plant.strainId, 10);
     const proc = ensureProcessing(draft);
-    proc.wet.push({ id: uid(), strainId: plant.strainId, grams: gain, quality: qm, stage: 'wet', createdAt: Date.now() });
+    proc.wet.push({ id: uid(), strainId: plant.strainId, grams: gain, quality: qBonus, stage: 'wet', createdAt: Date.now() });
     fillDryingSlots(proc);
     draft.plants = draft.plants.filter((p) => p.slot !== slotIndex);
     const tierBonus = qm >= 1.3 ? 1.5 : qm >= 1.1 ? 1.2 : 1;
     addXP(draft as any, Math.max(1, Math.floor((dryEstimate / 50) * tierBonus)));
+    if (draft.autoGrow?.[plant.strainId] && (draft.seeds[plant.strainId] || 0) > 0 && slotIndex < (draft.slotsUnlocked || 0)) {
+      draft.seeds[plant.strainId] = Math.max(0, (draft.seeds[plant.strainId] || 0) - 1);
+      draft.plants.push(createPlant(plant.strainId, slotIndex));
+    }
   });
   return checkQuestProgress(next, 'harvest', { strainId: plant.strainId, amount: gain });
 };
@@ -1605,6 +1668,38 @@ export const bulkFeed = (state: GameState) => {
   });
 };
 
+type QuickBuyType = 'water' | 'nutrient' | 'spray';
+export const quickBuyApply = (state: GameState, type: QuickBuyType, slot: number, pack?: boolean) => {
+  const plant = state.plants.find((p) => p.slot === slot);
+  if (!plant) return state;
+  const costMap: Record<QuickBuyType, number> = { water: 0.5, nutrient: 0.8, spray: 1.2 };
+  const singleCost = costMap[type] || 0.5;
+  const count = pack ? 5 : 1;
+  const cost = singleCost * count;
+  if ((state.cash || 0) < cost) return state;
+  return produce(state, (draft) => {
+    draft.cash -= cost;
+    const p = draft.plants.find((pl: any) => pl.slot === slot);
+    if (!p) return;
+    if (type === 'water') {
+      p.water = Math.min(WATER_MAX, (p.water || 0) + WATER_ADD_AMOUNT);
+    }
+    if (type === 'nutrient') {
+      p.nutrients = Math.min(NUTRIENT_MAX, (p.nutrients || 0) + NUTRIENT_ADD_AMOUNT);
+      p.quality = clamp((p.quality || 1) + 0.04, 0.4, 1.5);
+      const extra = Math.max(0, count - 1);
+      draft.consumables.nutrient = Math.max(0, (draft.consumables.nutrient || 0) + extra);
+    }
+    if (type === 'spray') {
+      draft.consumables.spray = Math.max(0, (draft.consumables.spray || 0) + count);
+      if (p.pest) {
+        p.pest = null;
+        draft.consumables.spray = Math.max(0, draft.consumables.spray - 1);
+      }
+    }
+  });
+};
+
 export const harvestAllReady = (state: GameState) => {
   let totalGain = 0;
   const next = produce(state, (draft) => {
@@ -1612,14 +1707,25 @@ export const harvestAllReady = (state: GameState) => {
     const ready = draft.plants.filter((p) => p.growProg >= 1);
     ready.forEach((p) => {
       const qm = qualityMultiplier(draft as any, p);
+      const mastery = masteryForStrain(draft as any, p.strainId);
+      const qBonus = mastery.level >= 10 && Math.random() < 0.15 ? qm * 2 : qm;
       const gain = harvestYieldFor(draft as any, p) * qm;
       totalGain += gain;
       const dryEstimate = gain * DRY_WEIGHT_MULT;
-      proc.wet.push({ id: uid(), strainId: p.strainId, grams: gain, quality: qm, stage: 'wet', createdAt: Date.now() });
+      proc.wet.push({ id: uid(), strainId: p.strainId, grams: gain, quality: qBonus, stage: 'wet', createdAt: Date.now() });
       addXP(draft as any, Math.max(1, Math.floor(dryEstimate / 50)));
+      addMasteryXp(draft as any, p.strainId, 10);
     });
     draft.plants = draft.plants.filter((p) => p.growProg < 1);
     fillDryingSlots(proc);
+    if (draft.autoGrow) {
+      ready.forEach((p) => {
+        if (draft.autoGrow?.[p.strainId] && (draft.seeds[p.strainId] || 0) > 0 && p.slot < (draft.slotsUnlocked || 0)) {
+          draft.seeds[p.strainId] = Math.max(0, (draft.seeds[p.strainId] || 0) - 1);
+          draft.plants.push(createPlant(p.strainId, p.slot));
+        }
+      });
+    }
   });
   if (totalGain > 0) {
     return checkQuestProgress(next, 'harvest', { amount: totalGain });
@@ -1847,6 +1953,12 @@ export const setInventoryFilters = (state: GameState, filter: string, sort: stri
   produce(state, (draft) => {
     draft.inventoryFilter = filter;
     draft.inventorySort = sort;
+  });
+
+export const setAutoGrow = (state: GameState, strainId: string, on: boolean) =>
+  produce(state, (draft) => {
+    draft.autoGrow = draft.autoGrow || {};
+    draft.autoGrow[strainId] = on;
   });
 
 export const toggleFavoriteStrain = (state: GameState, strainId: string) =>

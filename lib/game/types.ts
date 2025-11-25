@@ -343,8 +343,10 @@ export interface GameState {
   marketNews?: string;
   marketNewsTimer?: number;
   marketNewsMult?: number;
+  eventWaterMult?: number;
   marketTimer: number;
   marketEventName: string;
+  marketEventCooldown?: number;
   research: Record<string, boolean>;
   reputation: number;
   orders: Order[];
@@ -383,6 +385,8 @@ export interface GameState {
   favorites?: string[];
   bulkConserve?: boolean;
   staffEnergy?: Record<string, EmployeeState>;
+  strainMastery?: Record<string, number>;
+  autoGrow?: Record<string, boolean>;
   _empTimer?: number;
   _achTimer?: number;
 }

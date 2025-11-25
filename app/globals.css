@@ -3229,6 +3229,8 @@ button:active{ transform: translateY(0) scale(.98) !important; box-shadow: inset
 .quest-task-head{ display:flex; align-items:center; justify-content:space-between; }
 .quest-rewards{ display:flex; gap:6px; flex-wrap:wrap; margin-top:6px }
 
+.plant-meta.mastery .pill{ background: rgba(40,255,138,0.12); border:1px solid rgba(40,255,138,0.35); }
+
 
 
 /* Right panel: mini icon HUD */
@@ -4253,4 +4255,53 @@ body.high-contrast .shop-item.is-locked{opacity:0.85;}
 
 .bar-value,
 .plant-status{color:var(--text);}
+
+.modal-backdrop{
+  position:fixed;
+  inset:0;
+  background: rgba(0,0,0,0.55);
+  display:grid;
+  place-items:center;
+  z-index:999;
+}
+.modal.quickbuy{
+  background: var(--panel);
+  border:2px solid rgba(255,90,107,0.7);
+  border-radius:14px;
+  padding:14px;
+  box-shadow: 0 12px 28px rgba(0,0,0,.45);
+  min-width:280px;
+  max-width:420px;
+}
+.modal-header{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.quickbuy-actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+
+.responsive-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap:16px;
+  align-items:stretch;
+}
+.job-card, .estate-card, .upgrade, .research-card{
+  height:100%;
+  display:flex;
+  flex-direction:column;
+}
+
+/* Responsive Grid System für Karten */
+.responsive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem; /* Etwas Luft zwischen den Karten */
+  padding-bottom: 2rem; /* Platz für Scrolling am Ende */
+  width: 100%;
+}
+.responsive-grid > div {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.responsive-grid > div .card-footer {
+  margin-top: auto;
+}
 

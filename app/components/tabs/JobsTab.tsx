@@ -17,7 +17,7 @@ export function JobsTab({ state, actions }: Props) {
           <h2>Jobs</h2>
           <span className="hint">Bewirb dich und verdiene monatlich Geld</span>
         </div>
-        <div className="jobs-grid">
+        <div className="responsive-grid jobs-grid">
           <div className="jobs-header">
             <h3>Aktueller Job: {current ? current.name : 'Keiner'}</h3>
             {current && (

@@ -16,7 +16,7 @@ export function RealEstateTab({ state, actions }: Props) {
           <h2>Immobilienmakler</h2>
           <span className="hint">Upgrade deinen Grow-Raum</span>
         </div>
-        <div className="estate-grid">
+        <div className="responsive-grid estate-grid">
           {GROW_ROOMS.map((room, idx) => {
             const owned = idx <= curIdx;
             const canSell = owned && idx > 0;

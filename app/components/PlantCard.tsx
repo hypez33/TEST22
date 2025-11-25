@@ -7,8 +7,9 @@ import { fmtNumber, formatTimer } from '@/lib/game/utils';
 import { GameState, Plant, Strain } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
 import { emitFloatingText } from './ui/FloatingTextLayer';
-import React from 'react';
+import React, { useState } from 'react';
 import { useSound } from '../hooks/useSound';
+import { QuickBuyModal } from './modals/QuickBuyModal';
 
 type Props = {
   plant: Plant;
@@ -19,6 +20,8 @@ type Props = {
 
 export function PlantCard({ plant, strain, state, actions }: Props) {
   const harvestSound = useSound('/assets/audio/harvest.mp3', state.soundFx !== false);
+  const cashSound = useSound('/assets/audio/cash.mp3', state.soundFx !== false);
+  const [quickBuy, setQuickBuy] = useState<{ type: 'water' | 'nutrient' | 'spray'; slot: number } | null>(null);
   const growPct = Math.round((plant.growProg || 0) * 100);
   const waterPct = Math.round(((plant.water || 0) / WATER_MAX) * 100);
   const nutrientPct = Math.round(((plant.nutrients || 0) / NUTRIENT_MAX) * 100);
@@ -29,6 +32,9 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
   const ready = plant.growProg >= 1;
   const isWilted = (plant.health || 0) <= 0;
   const hasPest = !!plant.pest;
+  const mastery = (state.strainMastery || {})[plant.strainId] || 0;
+  const masteryLevel = mastery >= 1000 ? 10 : mastery >= 600 ? 7 : mastery >= 300 ? 5 : mastery >= 120 ? 3 : mastery >= 60 ? 2 : mastery >= 30 ? 1 : 0;
+  const autoGrowOn = !!state.autoGrow?.[plant.strainId];
 
   const phase = (() => {
     const gp = Math.max(0, Math.min(1, plant.growProg || 0));
@@ -52,7 +58,7 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
 
   const handleWater = (e: React.MouseEvent) => {
     if ((state.cash || 0) < WATER_COST_PER_USE) {
-      showFloat('Zu wenig Cash', e, 'loss');
+      setQuickBuy({ type: 'water', slot: plant.slot });
       return;
     }
     actions.waterPlant(plant.slot);
@@ -61,7 +67,7 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
 
   const handleFeed = (e: React.MouseEvent) => {
     if ((state.consumables.nutrient || 0) <= 0) {
-      showFloat('Kein Dünger!', e, 'loss');
+      setQuickBuy({ type: 'nutrient', slot: plant.slot });
       return;
     }
     actions.feedPlant(plant.slot);
@@ -69,16 +75,29 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
   };
 
   const handleTreat = (e: React.MouseEvent) => {
+    if (plant.pest && (state.consumables.spray || 0) <= 0) {
+      setQuickBuy({ type: 'spray', slot: plant.slot });
+      return;
+    }
     actions.treatPlant(plant.slot);
     showFloat('Abwehr', e, 'info');
   };
 
   return (
+    <>
     <div className={`plant-card ${ready ? 'plant-card-ready' : ''}`} data-slot={plant.slot}>
       <div className="plant-header">
         <div className="plant-left">
           <div className="plant-name">{strain.name}</div>
           <div className="plant-level">Level {plant.level}</div>
+        </div>
+        <div className="plant-meta mastery">
+          <span className="pill muted">Mastery L{masteryLevel}</span>
+          {masteryLevel >= 10 && (
+            <button className="chip small" onClick={() => actions.setAutoGrow?.(plant.strainId, !autoGrowOn)}>
+              Auto-Grow {autoGrowOn ? 'An' : 'Aus'}
+            </button>
+          )}
         </div>
         <div className="plant-meta">
           <div className="plant-timer" title="Zeit bis Ernte">
@@ -169,5 +188,20 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
         </div>
       </div>
     </div>
+    {quickBuy && (
+      <QuickBuyModal
+        isOpen={!!quickBuy}
+        itemType={quickBuy.type}
+        cost={quickBuy.type === 'water' ? 0.5 : quickBuy.type === 'nutrient' ? 0.8 : 1.2}
+        onClose={() => setQuickBuy(null)}
+        onGotoShop={() => window.dispatchEvent(new CustomEvent('open-shop'))}
+        onBuyAndApply={() => {
+          actions.quickBuyApply?.(quickBuy.type, quickBuy.slot, false);
+          cashSound.play();
+          setQuickBuy(null);
+        }}
+      />
+    )}
+    </>
   );
 }

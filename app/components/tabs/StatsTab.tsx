@@ -61,6 +61,25 @@ export function StatsTab({ state }: Props) {
 
       <div className="panel">
         <div className="panel-header">
+          <h3>Deine Meisterschaften</h3>
+          <span className="hint">XP & Level pro Sorte</span>
+        </div>
+        <div className="offer-list">
+          {Object.entries(state.strainMastery || {}).length === 0 && <div className="placeholder">Noch keine Meisterschaften gesammelt.</div>}
+          {Object.entries(state.strainMastery || {}).map(([id, xp]) => {
+            const lvl = xp >= 1000 ? 10 : xp >= 600 ? 7 : xp >= 300 ? 5 : xp >= 120 ? 3 : xp >= 60 ? 2 : xp >= 30 ? 1 : 0;
+            return (
+              <div key={id} className="offer-card">
+                <div className="offer-meta">{id}</div>
+                <div className="offer-desc">Level {lvl} · XP {fmtNumber(xp)}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
           <h3>Aktive Events</h3>
           <span className="hint">Globale Spielereignisse</span>
         </div>

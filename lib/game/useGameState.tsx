@@ -50,6 +50,7 @@ import {
   setBulkConserve,
   setSpeed,
   toggleFavoriteStrain,
+  setAutoGrow,
   checkQuestProgress,
   claimQuestReward,
   tickState,
@@ -65,7 +66,8 @@ import {
   startCuring,
   collectProcessed,
   collectAllProcessed,
-  pressRosin
+  pressRosin,
+  quickBuyApply
 } from './engine';
 import { GameState } from './types';
 import { gameStateSchema } from './saveSchema';
@@ -81,6 +83,7 @@ const buildActions = (setState: React.Dispatch<React.SetStateAction<GameState>>)
   setInventoryFilters: (filter: string, sort: string) => setState((s) => setInventoryFilters(s, filter, sort)),
   toggleBulkConserve: (on: boolean) => setState((s) => setBulkConserve(s, on)),
   toggleFavorite: (id: string) => setState((s) => toggleFavoriteStrain(s, id)),
+  setAutoGrow: (strainId: string, on: boolean) => setState((s) => setAutoGrow(s, strainId, on)),
   claimQuest: (id: string) => setState((s) => claimQuestReward(s, id)),
   waterPlant: (slot: number) => setState((s) => waterPlant(s, slot)),
   feedPlant: (slot: number) => setState((s) => feedPlant(s, slot)),
@@ -127,6 +130,7 @@ const buildActions = (setState: React.Dispatch<React.SetStateAction<GameState>>)
   collectAllProcessed: () => setState((s) => collectAllProcessed(s)),
   pressRosin: (batchId: string) => setState((s) => pressRosin(s, batchId)),
   importSave: (payload: GameState) => setState(() => applyOfflineProgress(hydrateState(payload))),
+  quickBuyApply: (type: 'water' | 'nutrient' | 'spray', slot: number, pack?: boolean) => setState((s) => quickBuyApply(s, type, slot, pack)),
   setBreedingParent: (parent: 1 | 2, strain: string | null) => setState((s) => setBreedingParent(s, parent, strain)),
   performBreeding: () => setState((s) => performBreeding(s)),
   buyContract: (id: string) => setState((s) => buyContract(s, id)),

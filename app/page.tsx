@@ -79,6 +79,12 @@ export default function Page() {
     prevAchievements.current = unlocked;
   }, [state.level, state.quests, ready]);
 
+  useEffect(() => {
+    const handler = () => setActiveTab('trade');
+    window.addEventListener('open-shop', handler as any);
+    return () => window.removeEventListener('open-shop', handler as any);
+  }, []);
+
   const renderTab = (id: string) => {
     switch (id) {
       case 'farm':
