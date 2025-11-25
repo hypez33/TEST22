@@ -387,6 +387,13 @@ export interface GameState {
   staffEnergy?: Record<string, EmployeeState>;
   strainMastery?: Record<string, number>;
   autoGrow?: Record<string, boolean>;
+  settings?: {
+    miniGamesEnabled?: boolean;
+    autoSkipMiniGame?: boolean;
+    miniGameDifficulty?: 'easy' | 'normal' | 'hard';
+  };
+  perfectHarvests?: number;
+  perfectStreak?: number;
   _empTimer?: number;
   _achTimer?: number;
 }

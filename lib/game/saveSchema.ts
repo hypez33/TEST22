@@ -39,6 +39,15 @@ export const gameStateSchema = z.object({
   completedQuests: z.array(z.string()).optional(),
   activeQuests: z.array(z.string()).optional(),
   unlockedAchievements: z.array(z.string()).optional(),
+  settings: z
+    .object({
+      miniGamesEnabled: z.boolean().optional(),
+      autoSkipMiniGame: z.boolean().optional(),
+      miniGameDifficulty: z.enum(['easy', 'normal', 'hard']).optional()
+    })
+    .optional(),
+  perfectHarvests: z.number().optional(),
+  perfectStreak: z.number().optional(),
   favorites: z.array(z.string()).optional(),
   bulkConserve: z.boolean().optional(),
   itemsOwned: z.record(z.any()).optional(),

@@ -229,9 +229,8 @@ const ensureProcessing = (state: any): ProcessingState => {
     state.processing = normalize(state.processing);
     return state.processing;
   }
-  const next = state as GameState;
-  next.processing = normalize((state as GameState).processing);
-  return next.processing;
+  const normalized = normalize((state as GameState).processing);
+  return normalized;
 };
 
 const normalizeQuestProgress = (qp: Partial<QuestProgress>): QuestProgress => {
@@ -462,12 +461,16 @@ const plantUpgradeCost = (state: GameState, plant: Plant) => {
 export const harvestYieldFor = (state: GameState, plant: Plant) => {
   const strain = getStrain(state, plant.strainId);
   const base = strain.yield || 10;
+  if (plant.growProg < 0.62) return 0;
+  const flowerProgress = Math.max(0, (plant.growProg - 0.62) / 0.38);
+  const flowerBonus = 0.3 + flowerProgress * 0.7;
   const levelMult = Math.pow(1.12, Math.max(0, plant.level - 1));
   const res = researchEffects(state);
   const bonus = state.harvestBonus || 1;
   const mastery = masteryForStrain(state, plant.strainId);
   const masteryYield = mastery.level >= 1 ? 1.05 : 1;
-  return base * levelMult * (1 + (res.yield || 0)) * globalMultiplier(state) * bonus * masteryYield;
+  const timingBonus = plant.readyTime <= 10 ? 1.15 : plant.readyTime > 60 ? 0.85 : 1;
+  return base * flowerBonus * levelMult * (1 + (res.yield || 0)) * globalMultiplier(state) * bonus * masteryYield * timingBonus;
 };
 
 const globalQualityPenalty = (state: GameState) => {
@@ -1561,6 +1564,39 @@ export const harvestPlant = (state: GameState, slotIndex: number) => {
   return checkQuestProgress(next, 'harvest', { strainId: plant.strainId, amount: gain });
 };
 
+export const harvestPlantWithBonus = (state: GameState, slotIndex: number, bonus = 1) => {
+  const idx = state.plants.findIndex((p) => p.slot === slotIndex);
+  if (idx === -1) return state;
+  const plant = state.plants[idx];
+  if (plant.growProg < 1) return state;
+  if ((state.itemsOwned['shears'] || 0) <= 0) return state;
+  const qm = qualityMultiplier(state, plant);
+  const mastery = masteryForStrain(state, plant.strainId);
+  const qBonus = mastery.level >= 10 && Math.random() < 0.15 ? qm * 2 : qm;
+  const gain = harvestYieldFor(state, plant) * qm * bonus;
+  const dryEstimate = gain * DRY_WEIGHT_MULT;
+  const next = produce(state, (draft) => {
+    addMasteryXp(draft as any, plant.strainId, 10);
+    if (bonus >= 1.4) {
+      draft.perfectHarvests = (draft.perfectHarvests || 0) + 1;
+      draft.perfectStreak = (draft.perfectStreak || 0) + 1;
+    } else {
+      draft.perfectStreak = 0;
+    }
+    const proc = ensureProcessing(draft);
+    proc.wet.push({ id: uid(), strainId: plant.strainId, grams: gain, quality: qBonus, stage: 'wet', createdAt: Date.now() });
+    fillDryingSlots(proc);
+    draft.plants = draft.plants.filter((p) => p.slot !== slotIndex);
+    const tierBonus = qm >= 1.3 ? 1.5 : qm >= 1.1 ? 1.2 : 1;
+    addXP(draft as any, Math.max(1, Math.floor((dryEstimate / 50) * tierBonus * bonus)));
+    if (draft.autoGrow?.[plant.strainId] && (draft.seeds[plant.strainId] || 0) > 0 && slotIndex < (draft.slotsUnlocked || 0)) {
+      draft.seeds[plant.strainId] = Math.max(0, (draft.seeds[plant.strainId] || 0) - 1);
+      draft.plants.push(createPlant(plant.strainId, slotIndex));
+    }
+  });
+  return checkQuestProgress(next, 'harvest', { strainId: plant.strainId, amount: gain });
+};
+
 export const removePlant = (state: GameState, slotIndex: number) => {
   const plant = state.plants.find((p) => p.slot === slotIndex);
   return produce(state, (draft) => {
@@ -1594,6 +1630,26 @@ export const feedPlant = (state: GameState, slotIndex: number) => {
     if (p) {
       p.nutrients = Math.min(NUTRIENT_MAX, (p.nutrients || 0) + NUTRIENT_ADD_AMOUNT);
       p.quality = clamp((p.quality || 1) + 0.04, 0.4, 1.5);
+      if (draft.consumables.pgr && draft.consumables.pgr > 0) {
+        draft.consumables.pgr -= 1;
+        p.pgrBoostSec = (p.pgrBoostSec || 0) + PGR_BOOST_SEC;
+      }
+    }
+  });
+};
+
+export const feedPlantWithBonus = (state: GameState, slotIndex: number, bonus = 1) => {
+  const plant = state.plants.find((p) => p.slot === slotIndex);
+  if (!plant) return state;
+  const ensured = ensureConsumables(state);
+  if (ensured.consumables.nutrient <= 0) return ensured;
+  return produce(ensured, (draft: any) => {
+    draft.consumables.nutrient -= 1;
+    const p = draft.plants.find((pl: any) => pl.slot === slotIndex);
+    if (p) {
+      p.nutrients = Math.min(NUTRIENT_MAX, (p.nutrients || 0) + NUTRIENT_ADD_AMOUNT);
+      const qualityBoost = 0.04 * bonus;
+      p.quality = clamp((p.quality || 1) + qualityBoost, 0.4, 1.5);
       if (draft.consumables.pgr && draft.consumables.pgr > 0) {
         draft.consumables.pgr -= 1;
         p.pgrBoostSec = (p.pgrBoostSec || 0) + PGR_BOOST_SEC;

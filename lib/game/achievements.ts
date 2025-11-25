@@ -35,5 +35,29 @@ export const ACHIEVEMENTS: Achievement[] = [
     description: 'Alle Grow-Slots freigeschaltet',
     reward: { type: 'haze', amount: 1 },
     condition: (s) => (s.slotsUnlocked || 0) >= 100
+  },
+  {
+    id: 'perfect_10',
+    icon: '⭐',
+    title: 'Erste Perfektion',
+    description: 'Erreiche 10x Perfekt bei Minigames',
+    reward: { type: 'haze', amount: 1 },
+    condition: (s) => (s.perfectHarvests || 0) >= 10
+  },
+  {
+    id: 'perfect_100',
+    icon: '🏆',
+    title: 'Meister-Grower',
+    description: 'Erreiche 100x Perfekt bei Minigames',
+    reward: { type: 'haze', amount: 3 },
+    condition: (s) => (s.perfectHarvests || 0) >= 100
+  },
+  {
+    id: 'perfect_streak',
+    icon: '🔥',
+    title: 'Im Flow',
+    description: 'Erreiche 5x Perfekt hintereinander',
+    reward: { type: 'haze', amount: 2 },
+    condition: (s) => (s.perfectStreak || 0) >= 5
   }
 ];
