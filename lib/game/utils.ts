@@ -26,6 +26,13 @@ export const formatTimer = (sec: number) => {
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
+export const formatPercent = (delta: number) => {
+  if (!Number.isFinite(delta)) return '0%';
+  const pct = delta * 100;
+  const sign = pct > 0 ? '+' : '';
+  return `${sign}${pct.toFixed(0)}%`;
+};
+
 export const defaultCaseStats = (): CaseStats => ({
   opened: 0,
   fastOpened: 0,

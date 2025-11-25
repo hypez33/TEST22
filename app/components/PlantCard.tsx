@@ -1,13 +1,15 @@
 'use client';
 
 import Image from 'next/image';
-import { harvestYieldFor, qualityMultiplier, statusForPlant, timerForPlant, DRY_WEIGHT_MULTIPLIER, WATER_COST_PER_USE } from '@/lib/game/engine';
+import { harvestYieldFor, harvestYieldDetails, qualityMultiplier, statusForPlant, timerForPlant, DRY_WEIGHT_MULTIPLIER, WATER_COST_PER_USE } from '@/lib/game/engine';
 import { NUTRIENT_MAX, WATER_MAX } from '@/lib/game/data';
 import { fmtNumber, formatTimer } from '@/lib/game/utils';
 import { GameState, Plant, Strain } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
 import { emitFloatingText } from './ui/FloatingTextLayer';
+import { YieldTooltip } from './ui/YieldTooltip';
 import { emitClickParticles } from './ui/ClickEffects';
+import { Tooltip } from './ui/Tooltip';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSound } from '../hooks/useSound';
@@ -35,6 +37,8 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
   const statuses = statusForPlant(state, plant);
   const wetYield = harvestYieldFor(state, plant) * qualityMultiplier(state, plant);
   const dryYield = wetYield * DRY_WEIGHT_MULTIPLIER;
+  const yieldInfo = harvestYieldDetails(state, plant);
+  const qualityMult = qualityMultiplier(state, plant);
   const ready = plant.growProg >= 1;
   const isWilted = (plant.health || 0) <= 0;
   const hasPest = !!plant.pest;
@@ -159,8 +163,10 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
           </div>
           <div className="plant-health">Vitalität {Math.round(plant.health)}%</div>
         </div>
-        <div className="plant-prod" title="Ertrag je Ernte (trocken)">
-          {fmtNumber(dryYield)} g
+      <div className="plant-prod" title="Ertrag je Ernte (trocken)">
+          <Tooltip content={<YieldTooltip breakdown={yieldInfo.breakdown} qualityMult={qualityMult} />}>
+            <span>{fmtNumber(dryYield)} g</span>
+          </Tooltip>
         </div>
       </div>
       <div className="plant-infobar">

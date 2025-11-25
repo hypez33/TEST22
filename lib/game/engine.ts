@@ -462,20 +462,54 @@ const plantUpgradeCost = (state: GameState, plant: Plant) => {
   return Math.round(strain.cost * Math.pow(1.15, plant.level));
 };
 
-export const harvestYieldFor = (state: GameState, plant: Plant) => {
+export const clampYield = (val: number, cap = 10000) => {
+  if (!isFinite(val)) return 0;
+  return Math.max(0, Math.min(val, cap));
+};
+
+export const harvestYieldDetails = (state: GameState, plant: Plant) => {
   const strain = getStrain(state, plant.strainId);
   const base = strain.yield || 10;
-  if (plant.growProg < 0.62) return 0;
+  if (plant.growProg < 0.62) return { value: 0, breakdown: { base, flowerBonus: 0, levelMult: 1, researchMult: 1, globalMult: 1, mastery: 1, timing: 1, event: state.harvestBonus || 1, cap: 0, appliedCap: false } };
   const flowerProgress = Math.max(0, (plant.growProg - 0.62) / 0.38);
   const flowerBonus = 0.3 + flowerProgress * 0.7;
-  const levelMult = Math.pow(1.12, Math.max(0, plant.level - 1));
+  // flachere Skalierung mit abnehmenden Zugewinnen
+  const levelMult = 1 + Math.log1p(Math.max(0, plant.level - 1)) * 0.35;
   const res = researchEffects(state);
   const bonus = state.harvestBonus || 1;
   const mastery = masteryForStrain(state, plant.strainId);
   const masteryYield = mastery.level >= 1 ? 1.05 : 1;
   const timingBonus = plant.readyTime <= 10 ? 1.15 : plant.readyTime > 60 ? 0.85 : 1;
-  return base * flowerBonus * levelMult * (1 + (res.yield || 0)) * globalMultiplier(state) * bonus * masteryYield * timingBonus;
+  const rarityCaps: Record<string, number> = {
+    common: 500,
+    uncommon: 900,
+    rare: 1500,
+    epic: 2800,
+    legendary: 5000
+  };
+  const cap = rarityCaps[(strain.rarity || 'common').toLowerCase()] || 800;
+  const researchMult = 1 + (res.yield || 0);
+  const globalMult = globalMultiplier(state);
+  const raw = base * flowerBonus * levelMult * researchMult * globalMult * bonus * masteryYield * timingBonus;
+  const value = clampYield(raw, cap);
+  return {
+    value,
+    breakdown: {
+      base,
+      flowerBonus,
+      levelMult,
+      researchMult,
+      globalMult,
+      mastery: masteryYield,
+      timing: timingBonus,
+      event: bonus,
+      cap,
+      appliedCap: value < raw
+    }
+  };
 };
+
+export const harvestYieldFor = (state: GameState, plant: Plant) => harvestYieldDetails(state, plant).value;
 
 const globalQualityPenalty = (state: GameState) => {
   if (state?.maintenance?.filterPenaltyActive) return 0.95;
@@ -596,7 +630,12 @@ const advancePlant = (state: GameState, plant: Plant, delta: number) => {
   let remaining = delta;
   const growTime = growTimeFor(state, plant);
   while (remaining > 0) {
-    const step = Math.min(remaining, 1);
+    const step =
+      remaining > 3600 ? 60 :
+      remaining > 600 ? 20 :
+      remaining > 120 ? 10 :
+      remaining > 30 ? 5 :
+      Math.min(remaining, 1);
     const res = researchEffects(state);
     const waterMult = state.eventWaterMult || 1;
     plant.water = clamp(plant.water - WATER_DRAIN_PER_SEC * waterMult * (1 - (res.water || 0)) * step, 0, WATER_MAX);
@@ -1559,7 +1598,8 @@ export const harvestPlant = (state: GameState, slotIndex: number) => {
   const qm = qualityMultiplier(state, plant);
   const mastery = masteryForStrain(state, plant.strainId);
   const qBonus = mastery.level >= 10 && Math.random() < 0.15 ? qm * 2 : qm;
-  const gain = harvestYieldFor(state, plant) * qm;
+  const yd = harvestYieldDetails(state, plant);
+  const gain = clampYield(yd.value * qm, (yd.breakdown.cap || yd.value) * qm);
   const dryEstimate = gain * DRY_WEIGHT_MULT;
   const next = produce(state, (draft) => {
     draft.itemsOwned = draft.itemsOwned || {};
@@ -1589,7 +1629,8 @@ export const harvestPlantWithBonus = (state: GameState, slotIndex: number, bonus
   const qm = qualityMultiplier(state, plant);
   const mastery = masteryForStrain(state, plant.strainId);
   const qBonus = mastery.level >= 10 && Math.random() < 0.15 ? qm * 2 : qm;
-  const gain = harvestYieldFor(state, plant) * qm * bonus;
+  const yd = harvestYieldDetails(state, plant);
+  const gain = clampYield(yd.value * qm * bonus, (yd.breakdown.cap || yd.value) * qm * Math.max(1, bonus));
   const dryEstimate = gain * DRY_WEIGHT_MULT;
   const next = produce(state, (draft) => {
     draft.itemsOwned = draft.itemsOwned || {};
