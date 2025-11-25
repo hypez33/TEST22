@@ -233,7 +233,16 @@ export const GROW_ROOMS: GrowRoom[] = [
 ];
 
 export const EMPLOYEES: Employee[] = [
-  { id: 'grower', name: 'Grower', desc: 'Automatisiert Wässern und Düngen', salary: 200, tasks: ['water', 'feed'], reqLevel: 2, image: 'https://via.placeholder.com/80x80/00c16a/ffffff?text=GROWER' },
+  {
+    id: 'growhelper',
+    name: 'Grow-Helfer',
+    desc: 'Allrounder für frühe Phasen: Wässern, Düngen, Ernten & Replant',
+    salary: 300,
+    tasks: ['water', 'feed', 'harvest', 'plant'],
+    capacity: 3,
+    reqLevel: 2,
+    image: 'https://via.placeholder.com/80x80/00c16a/ffffff?text=HELPER'
+  },
   { id: 'caretaker', name: 'Caretaker', desc: 'Behandelt Schädlinge automatisch', salary: 250, tasks: ['treat'], reqLevel: 5, image: 'https://via.placeholder.com/80x80/00c16a/ffffff?text=CARETAKER' },
   { id: 'harvester', name: 'Harvester', desc: 'Automatisiert Ernten', salary: 300, tasks: ['harvest'], reqLevel: 8, image: 'https://via.placeholder.com/80x80/00c16a/ffffff?text=HARVESTER' }
 ];

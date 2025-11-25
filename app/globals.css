@@ -4409,3 +4409,76 @@ body.high-contrast .shop-item.is-locked{opacity:0.85;}
 .mini-game-bonus .good{ color:#34d399; margin-right:4px; }
 .mini-game-bonus .bad{ color:#f87171; margin-left:4px; }
 
+.icon-btn{
+  transition: transform .12s ease, box-shadow .16s ease, filter .16s ease;
+}
+.icon-btn:hover:not(:disabled){
+  transform: translateY(-1px) scale(1.03);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.25);
+}
+.icon-btn:active:not(:disabled){
+  transform: translateY(1px) scale(0.97);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3) inset;
+  filter: brightness(1.1);
+}
+.icon-btn.flash{
+  animation: btnFlash .45s ease;
+}
+@keyframes btnFlash{
+  0%{ box-shadow:0 0 0 0 rgba(34,197,94,0.55); }
+  70%{ box-shadow:0 0 0 10px rgba(34,197,94,0); }
+  100%{ box-shadow:0 0 0 0 rgba(34,197,94,0); }
+}
+.icon-inline.fertilizer{
+  display:inline-flex;
+  width:18px;
+  height:18px;
+}
+.icon-inline.fertilizer svg{
+  width:100%;
+  height:100%;
+  fill: currentColor;
+}
+
+.progress, .water, .nutrients{
+  position:relative;
+  background: rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:10px;
+  overflow:hidden;
+}
+.progress-bar, .water-bar, .nutrient-bar{
+  height:100%;
+  border-radius:8px;
+  background-size: 200% 100%;
+  background-position: 0 0;
+  transition: width .2s ease, filter .2s ease, background .3s ease;
+  position:relative;
+}
+.progress-bar.growing{
+  background-image: linear-gradient(90deg, #34d399, #059669, #34d399);
+  animation: barShine 2.5s linear infinite;
+}
+.progress-bar:not(.growing){
+  background-image: linear-gradient(90deg, #22c55e, #16a34a);
+}
+.water-bar{
+  background-image: linear-gradient(90deg, #38bdf8, #0ea5e9, #38bdf8);
+  animation: barShine 3s linear infinite;
+}
+.nutrient-bar{
+  background-image: linear-gradient(90deg, #f97316, #fb923c, #f97316);
+  animation: barShine 3.2s linear infinite;
+}
+.water-bar.low, .nutrient-bar.low{
+  background-image: linear-gradient(90deg, #ef4444, #b91c1c);
+  animation: pulseLow 1.2s ease-in-out infinite;
+}
+@keyframes barShine{
+  0%{ background-position: 0 0; }
+  100%{ background-position: 200% 0; }
+}
+@keyframes pulseLow{
+  0%,100%{ filter: drop-shadow(0 0 0 rgba(239,68,68,0.5)); }
+  50%{ filter: drop-shadow(0 0 6px rgba(239,68,68,0.8)); }
+}

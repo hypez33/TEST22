@@ -160,6 +160,7 @@ export interface Employee {
   desc: string;
   salary: number;
   tasks: string[];
+  capacity?: number;
   reqLevel: number;
   image: string;
 }

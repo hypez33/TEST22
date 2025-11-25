@@ -7,7 +7,7 @@ import { fmtNumber, formatTimer } from '@/lib/game/utils';
 import { GameState, Plant, Strain } from '@/lib/game/types';
 import { GameActions } from '@/lib/game/useGameState';
 import { emitFloatingText } from './ui/FloatingTextLayer';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSound } from '../hooks/useSound';
 import { QuickBuyModal } from './modals/QuickBuyModal';
@@ -25,6 +25,7 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
   const cashSound = useSound('/assets/audio/cash.mp3', state.soundFx !== false);
   const [quickBuy, setQuickBuy] = useState<{ type: 'water' | 'nutrient' | 'spray'; slot: number } | null>(null);
   const [miniGame, setMiniGame] = useState<{ type: 'water' | 'harvest' | 'feed' | 'treat'; slot: number } | null>(null);
+  const [flashAction, setFlashAction] = useState<'harvest' | 'water' | 'feed' | 'treat' | null>(null);
   const lastPointer = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const growPct = Math.round((plant.growProg || 0) * 100);
   const waterPct = Math.round(((plant.water || 0) / WATER_MAX) * 100);
@@ -50,6 +51,9 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
   })();
 
   const phaseImage = `/assets/phase${phase}.png`;
+  const waterLow = waterPct < 20;
+  const nutrientLow = nutrientPct < 20;
+  const isGrowing = !ready && !isWilted;
 
   const showFloat = (text: string, e: React.MouseEvent, tone: 'gain' | 'loss' | 'info' = 'gain') => {
     lastPointer.current = { x: e.clientX, y: e.clientY };
@@ -66,9 +70,11 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
       actions.harvestPlant(plant.slot);
       showFloat(`+${fmtNumber(wetYield)}g Nass`, e, 'gain');
       harvestSound.play();
+      setFlashAction('harvest');
       return;
     }
     lastPointer.current = { x: e.clientX, y: e.clientY };
+    setFlashAction('harvest');
     setMiniGame({ type: 'harvest', slot: plant.slot });
   };
 
@@ -80,9 +86,11 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
     if (!miniGamesEnabled || autoSkipMiniGame) {
       actions.waterPlant(plant.slot);
       showFloat(`-${WATER_COST_PER_USE.toFixed(2)} $`, e, 'info');
+      setFlashAction('water');
       return;
     }
     lastPointer.current = { x: e.clientX, y: e.clientY };
+    setFlashAction('water');
     setMiniGame({ type: 'water', slot: plant.slot });
   };
 
@@ -94,9 +102,11 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
     if (!miniGamesEnabled || autoSkipMiniGame) {
       actions.feedPlant(plant.slot);
       showFloat('-1 Dünger', e, 'info');
+      setFlashAction('feed');
       return;
     }
     lastPointer.current = { x: e.clientX, y: e.clientY };
+    setFlashAction('feed');
     setMiniGame({ type: 'feed', slot: plant.slot });
   };
 
@@ -108,11 +118,19 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
     if (!miniGamesEnabled || autoSkipMiniGame) {
       actions.treatPlant(plant.slot);
       showFloat('Abwehr', e, 'info');
+      setFlashAction('treat');
       return;
     }
     lastPointer.current = { x: e.clientX, y: e.clientY };
+    setFlashAction('treat');
     setMiniGame({ type: 'treat', slot: plant.slot });
   };
+
+  useEffect(() => {
+    if (!flashAction) return;
+    const t = setTimeout(() => setFlashAction(null), 380);
+    return () => clearTimeout(t);
+  }, [flashAction]);
 
   return (
     <>
@@ -170,7 +188,7 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
           <i className="fi fi-sr-plant-alt"></i> Wachstum
         </div>
         <div className="progress" title="Wachstum">
-          <div className="progress-bar" style={{ width: `${growPct}%` }} />
+          <div className={`progress-bar ${isGrowing ? 'growing' : ''}`} style={{ width: `${growPct}%` }} />
         </div>
         <div className="bar-value">{growPct}%</div>
       </div>
@@ -179,7 +197,7 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
           <i className="fi fi-sr-raindrops"></i> Wasser
         </div>
         <div className="water" title="Wasserstand">
-          <div className="water-bar" style={{ width: `${waterPct}%` }} />
+          <div className={`water-bar ${waterLow ? 'low' : ''}`} style={{ width: `${waterPct}%` }} />
         </div>
         <div className="bar-value">{waterPct}%</div>
       </div>
@@ -188,23 +206,27 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
           <i className="fi fi-sr-flask"></i> Nährstoffe
         </div>
         <div className="nutrients" title="Nährstofflevel">
-          <div className="nutrient-bar" style={{ width: `${nutrientPct}%` }} />
+          <div className={`nutrient-bar ${nutrientLow ? 'low' : ''}`} style={{ width: `${nutrientPct}%` }} />
         </div>
         <div className="bar-value">{nutrientPct}%</div>
       </div>
       <div className="plant-hud">
         <div className="hud-actions">
           <div className="hud-left">
-            <button className="icon-btn" aria-label="Ernten" title="Ernten" onClick={handleHarvest} disabled={!ready}>
+            <button className={`icon-btn ${flashAction === 'harvest' ? 'flash' : ''}`} aria-label="Ernten" title="Ernten" onClick={handleHarvest} disabled={!ready}>
               <i className="fi fi-sr-scissors"></i>
             </button>
-            <button className="icon-btn" aria-label="Wässern" title={`Kosten: ${WATER_COST_PER_USE.toFixed(2)} $`} onClick={handleWater}>
+            <button className={`icon-btn ${flashAction === 'water' ? 'flash' : ''}`} aria-label="Wässern" title={`Kosten: ${WATER_COST_PER_USE.toFixed(2)} $`} onClick={handleWater}>
               <i className="fi fi-sr-raindrops"></i>
             </button>
-            <button className="icon-btn" aria-label="Düngen" title="Düngen" onClick={handleFeed}>
-              <i className="fi fi-sr-flask"></i>
+            <button className={`icon-btn ${flashAction === 'feed' ? 'flash' : ''}`} aria-label="Düngen" title="Düngen" onClick={handleFeed}>
+              <span className="icon-inline fertilizer" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation">
+                  <path d="M7 3h10l-1 4.5c1.8 1 3 2.9 3 5 0 3.3-2.7 6-6 6-.7 0-1.4-.1-2-.4-.6.3-1.3.4-2 .4C6.7 18.5 4 15.8 4 12.5c0-2.1 1.2-4 3-5L7 3Zm3.5 12.5c.3 0 .5-.2.5-.5 0-.5-.4-1-1-1s-1 .5-1 1 .4 1 1 1c.2 0 .4 0 .5-.1ZM13 15c.3 0 .5-.2.5-.5 0-.5-.4-1-1-1s-1 .5-1 1 .4 1 1 1c.2 0 .4 0 .5-.1ZM12 11c.6 0 1-.5 1-1s-.4-1-1-1-1 .5-1 1 .4 1 1 1Z" />
+                </svg>
+              </span>
             </button>
-            <button className="icon-btn" aria-label="Abwehr" title="Abwehr" onClick={handleTreat}>
+            <button className={`icon-btn ${flashAction === 'treat' ? 'flash' : ''}`} aria-label="Abwehr" title="Abwehr" onClick={handleTreat}>
               <i className="fi fi-sr-bug"></i>
             </button>
             <button className="icon-btn" aria-label="Upgrade" title="Upgrade" onClick={() => actions.upgradePlant(plant.slot)}>

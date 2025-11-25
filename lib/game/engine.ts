@@ -320,6 +320,10 @@ export const hydrateState = (loaded?: Partial<GameState>): GameState => {
     draft.pestGlobalRate = typeof draft.pestGlobalRate === 'number' ? draft.pestGlobalRate : PEST_GLOBAL_RATE;
     draft.cashRain = !!draft.cashRain;
     draft.slotsUnlocked = Math.max(2, Math.min(draft.slotsUnlocked || 2, currentMaxSlots(draft as any)));
+    if (draft.employees?.grower && !draft.employees?.growhelper) {
+      draft.employees.growhelper = { ...(draft.employees as any).grower };
+      delete (draft.employees as any).grower;
+    }
     if (draft.employees) {
       Object.keys(draft.employees).forEach((key) => {
         const val = (draft.employees as any)[key];
@@ -1542,13 +1546,16 @@ export const harvestPlant = (state: GameState, slotIndex: number) => {
   if (idx === -1) return state;
   const plant = state.plants[idx];
   if (plant.growProg < 1) return state;
-  if ((state.itemsOwned['shears'] || 0) <= 0) return state;
   const qm = qualityMultiplier(state, plant);
   const mastery = masteryForStrain(state, plant.strainId);
   const qBonus = mastery.level >= 10 && Math.random() < 0.15 ? qm * 2 : qm;
   const gain = harvestYieldFor(state, plant) * qm;
   const dryEstimate = gain * DRY_WEIGHT_MULT;
   const next = produce(state, (draft) => {
+    draft.itemsOwned = draft.itemsOwned || {};
+    if ((draft.itemsOwned['shears'] || 0) > 0) {
+      draft.itemsOwned['shears'] = Math.max(0, (draft.itemsOwned['shears'] || 0) - 1);
+    }
     addMasteryXp(draft as any, plant.strainId, 10);
     const proc = ensureProcessing(draft);
     proc.wet.push({ id: uid(), strainId: plant.strainId, grams: gain, quality: qBonus, stage: 'wet', createdAt: Date.now() });
@@ -1569,13 +1576,16 @@ export const harvestPlantWithBonus = (state: GameState, slotIndex: number, bonus
   if (idx === -1) return state;
   const plant = state.plants[idx];
   if (plant.growProg < 1) return state;
-  if ((state.itemsOwned['shears'] || 0) <= 0) return state;
   const qm = qualityMultiplier(state, plant);
   const mastery = masteryForStrain(state, plant.strainId);
   const qBonus = mastery.level >= 10 && Math.random() < 0.15 ? qm * 2 : qm;
   const gain = harvestYieldFor(state, plant) * qm * bonus;
   const dryEstimate = gain * DRY_WEIGHT_MULT;
   const next = produce(state, (draft) => {
+    draft.itemsOwned = draft.itemsOwned || {};
+    if ((draft.itemsOwned['shears'] || 0) > 0) {
+      draft.itemsOwned['shears'] = Math.max(0, (draft.itemsOwned['shears'] || 0) - 1);
+    }
     addMasteryXp(draft as any, plant.strainId, 10);
     if (bonus >= 1.4) {
       draft.perfectHarvests = (draft.perfectHarvests || 0) + 1;
@@ -2245,17 +2255,141 @@ export const setEmployeeResting = (state: GameState, id: string, resting: boolea
   });
 };
 
+const employeeEnergyCost = (level: number) => Math.max(4, 8 - level);
+
+const tryHarvestDraft = (draft: GameState, plant: Plant) => {
+  if (plant.growProg < 1) return false;
+  if ((draft.itemsOwned?.['shears'] || 0) <= 0) return false; // mindestens eine Schere vorhanden
+  const qm = qualityMultiplier(draft, plant);
+  const mastery = masteryForStrain(draft, plant.strainId);
+  const qBonus = mastery.level >= 10 && Math.random() < 0.15 ? qm * 2 : qm;
+  const gain = harvestYieldFor(draft, plant) * qm;
+  const dryEstimate = gain * DRY_WEIGHT_MULT;
+  addMasteryXp(draft as any, plant.strainId, 10);
+  const proc = ensureProcessing(draft);
+  proc.wet.push({ id: uid(), strainId: plant.strainId, grams: gain, quality: qBonus, stage: 'wet', createdAt: Date.now() });
+  fillDryingSlots(proc);
+  draft.plants = draft.plants.filter((p) => p.slot !== plant.slot);
+  const tierBonus = qm >= 1.3 ? 1.5 : qm >= 1.1 ? 1.2 : 1;
+  addXP(draft as any, Math.max(1, Math.floor((dryEstimate / 50) * tierBonus)));
+  return true;
+};
+
+const tryWaterDraft = (draft: GameState, plant: Plant) => {
+  if (plant.water >= WATER_MAX * 0.6) return false;
+  if ((draft.cash || 0) < WATER_COST) return false;
+  draft.cash = Math.max(0, (draft.cash || 0) - WATER_COST);
+  plant.water = Math.min(WATER_MAX, (plant.water || 0) + WATER_ADD_AMOUNT);
+  return true;
+};
+
+const tryFeedDraft = (draft: GameState, plant: Plant) => {
+  ensureConsumables(draft);
+  if (plant.nutrients >= NUTRIENT_MAX * 0.6) return false;
+  if ((draft.consumables?.nutrient || 0) <= 0) return false;
+  draft.consumables.nutrient -= 1;
+  plant.nutrients = Math.min(NUTRIENT_MAX, (plant.nutrients || 0) + NUTRIENT_ADD_AMOUNT);
+  plant.quality = clamp((plant.quality || 1) + 0.04, 0.4, 1.5);
+  if (draft.consumables.pgr && draft.consumables.pgr > 0) {
+    draft.consumables.pgr -= 1;
+    plant.pgrBoostSec = (plant.pgrBoostSec || 0) + PGR_BOOST_SEC;
+  }
+  return true;
+};
+
+const pickSeedId = (draft: GameState) => {
+  const seeds = draft.seeds || {};
+  const favorites = draft.favorites || [];
+  const fav = favorites.find((id) => (seeds[id] || 0) > 0);
+  if (fav) return fav;
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const key of Object.keys(seeds)) {
+    const qty = seeds[key] || 0;
+    if (qty > bestCount) {
+      best = key;
+      bestCount = qty;
+    }
+  }
+  return best;
+};
+
+const emptySlots = (draft: GameState) => {
+  const used = new Set((draft.plants || []).map((p) => p.slot));
+  const max = draft.slotsUnlocked || 0;
+  const res: number[] = [];
+  for (let i = 0; i < max; i++) {
+    if (!used.has(i)) res.push(i);
+  }
+  return res;
+};
+
+const tryPlantDraft = (draft: GameState, slot: number, strainId: string) => {
+  if (!strainId) return false;
+  if ((draft.seeds?.[strainId] || 0) <= 0) return false;
+  draft.seeds[strainId] = Math.max(0, (draft.seeds[strainId] || 0) - 1);
+  draft.plants.push(createPlant(strainId, slot));
+  return true;
+};
+
+const runGrowHelper = (draft: GameState, maxActions: number) => {
+  draft.itemsOwned = draft.itemsOwned || {};
+  let remaining = maxActions;
+  let done = 0;
+  const ready = draft.plants.filter((p) => p.growProg >= 1 && p.health > 0 && (draft.itemsOwned?.['shears'] || 0) > 0);
+  for (const plant of ready) {
+    if (remaining <= 0) break;
+    if (tryHarvestDraft(draft, plant)) {
+      remaining--;
+      done++;
+    }
+  }
+  if (remaining <= 0) return done;
+  const careList = [...draft.plants]
+    .filter((p) => p.health > 0)
+    .sort((a, b) => (a.water + a.nutrients) - (b.water + b.nutrients));
+  for (const plant of careList) {
+    if (remaining <= 0) break;
+    if (plant.water < WATER_MAX * 0.4 && tryWaterDraft(draft, plant)) {
+      remaining--;
+      done++;
+    }
+    if (remaining <= 0) break;
+    if (plant.nutrients < NUTRIENT_MAX * 0.4 && tryFeedDraft(draft, plant)) {
+      remaining--;
+      done++;
+    }
+  }
+  if (remaining <= 0) return done;
+  const empties = emptySlots(draft);
+  const seedId = pickSeedId(draft);
+  for (const slot of empties) {
+    if (remaining <= 0) break;
+    if (seedId && tryPlantDraft(draft, slot, seedId)) {
+      remaining--;
+      done++;
+    }
+  }
+  return done;
+};
+
 const employeeActions = (state: GameState, dt: number) => {
-  const updated = produce(state, (draft) => {
-    draft._empTimer = (draft._empTimer || 0) + dt;
-    if ((draft._empTimer || 0) < 5) return;
+  const timer = (state._empTimer || 0) + dt;
+  if (timer < 5) {
+    return produce(state, (draft) => {
+      draft._empTimer = timer;
+    });
+  }
+  return produce(state, (draft) => {
     draft._empTimer = 0;
     const breakroomLevel = draft.upgrades?.['breakroom'] || 0;
+    ensureConsumables(draft);
     for (const emp of EMPLOYEES) {
       const data = draft.employees[emp.id];
       if (!data) continue;
       data.energy = typeof data.energy === 'number' ? data.energy : 100;
       const level = data.level || 1;
+      const costPerAction = employeeEnergyCost(level);
 
       if (data.resting) {
         if ((draft.consumables.coffee || 0) > 0) {
@@ -2270,6 +2404,19 @@ const employeeActions = (state: GameState, dt: number) => {
         continue;
       }
 
+      if (emp.id === 'growhelper') {
+        const maxByEnergy = Math.max(0, Math.floor(data.energy / costPerAction));
+        const allowance = Math.min(emp.capacity || 1, maxByEnergy);
+        if (allowance <= 0) {
+          data.resting = true;
+          continue;
+        }
+        const worked = runGrowHelper(draft as any, allowance);
+        data.energy = Math.max(0, data.energy - worked * costPerAction);
+        if (data.energy <= 5) data.resting = true;
+        continue;
+      }
+
       for (const task of emp.tasks) {
         if (data.energy <= 0) {
           data.resting = true;
@@ -2277,8 +2424,7 @@ const employeeActions = (state: GameState, dt: number) => {
         }
         const didWork = performEmployeeTask(draft as any, task);
         if (didWork) {
-          const cost = Math.max(4, 8 - level);
-          data.energy = Math.max(0, data.energy - cost);
+          data.energy = Math.max(0, data.energy - costPerAction);
         }
         if (data.energy <= 5) {
           data.resting = true;
@@ -2287,7 +2433,6 @@ const employeeActions = (state: GameState, dt: number) => {
       }
     }
   });
-  return updated;
 };
 
 const performEmployeeTask = (state: GameState, task: string) => {
