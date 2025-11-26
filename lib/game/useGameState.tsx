@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { SAVE_KEY } from './data';
 import {
   addMessage,
@@ -150,22 +150,67 @@ const buildActions = (setState: React.Dispatch<React.SetStateAction<GameState>>)
 export function useGameState() {
   const [state, setState] = useState<GameState>(createInitialState());
   const [ready, setReady] = useState(false);
+  const [remoteEnabled, setRemoteEnabled] = useState(false);
+  const latestStateRef = useRef(state);
 
   useEffect(() => {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem(SAVE_KEY) : null;
-    if (raw) {
+    latestStateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const bootstrap = async () => {
+      let initial: GameState | null = null;
+      let remote = false;
       try {
-        const parsed = JSON.parse(raw);
-        const validated = gameStateSchema.parse(parsed) as unknown as GameState;
-        setState((s) => applyOfflineProgress(hydrateState(validated)));
+        const res = await fetch('/api/game/load', { credentials: 'include' });
+        if (res.ok) {
+          remote = true;
+          const payload = await res.json();
+          try {
+            const validated = gameStateSchema.parse(payload.data) as unknown as GameState;
+            initial = applyOfflineProgress(hydrateState(validated));
+          } catch (err) {
+            console.warn('Entfernter Spielstand unvollständig, starte frisch', err);
+            initial = createInitialState();
+          }
+        } else if (res.status === 404) {
+          initial = createInitialState();
+          remote = true;
+        } else if (res.status === 401) {
+          remote = false;
+        }
       } catch (err) {
-        console.warn('Konnte Spielstand nicht laden', err);
-        setState(createInitialState());
+        console.warn('Konnte entfernten Spielstand nicht laden', err);
       }
-    } else {
-      setState(createInitialState());
-    }
-    setReady(true);
+
+      if (!initial) {
+        const raw = typeof window !== 'undefined' ? localStorage.getItem(SAVE_KEY) : null;
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            const validated = gameStateSchema.parse(parsed) as unknown as GameState;
+            initial = applyOfflineProgress(hydrateState(validated));
+          } catch (err) {
+            console.warn('Konnte Spielstand nicht laden', err);
+          }
+        }
+      }
+
+      if (!initial) {
+        initial = createInitialState();
+      }
+
+      if (cancelled) return;
+      setState(initial);
+      setRemoteEnabled(remote);
+      setReady(true);
+    };
+
+    bootstrap();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -194,6 +239,30 @@ export function useGameState() {
     body.classList.toggle('compact', !!state.compactMode);
     body.classList.toggle('high-contrast', !!state.highContrast);
   }, [ready, state.theme, state.compactMode, state.highContrast]);
+
+  useEffect(() => {
+    if (!ready || !remoteEnabled) return;
+    const save = async () => {
+      try {
+        await fetch('/api/game/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ data: latestStateRef.current })
+        });
+      } catch (err) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('Konnte Spielstand nicht speichern', err);
+        }
+      }
+    };
+
+    save();
+    const id = window.setInterval(save, 15000);
+    return () => {
+      clearInterval(id);
+    };
+  }, [ready, remoteEnabled]);
 
   const actions = useMemo(() => buildActions(setState), []);
   const derived = useMemo(

@@ -1,174 +1,327 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { HeaderHUD } from './components/HeaderHUD';
-import { SidebarNav } from './components/SidebarNav';
-import { FarmTab } from './components/tabs/FarmTab';
-import { ShopTab } from './components/tabs/ShopTab';
-import { InventoryTab } from './components/tabs/InventoryTab';
-import { MarketTab } from './components/tabs/MarketTab';
-import { CasesTab } from './components/tabs/CasesTab';
-import { JobsTab } from './components/tabs/JobsTab';
-import { InboxTab } from './components/tabs/InboxTab';
-import { RealEstateTab } from './components/tabs/RealEstateTab';
-import { UpgradesTab } from './components/tabs/UpgradesTab';
-import { ResearchTab } from './components/tabs/ResearchTab';
-import { StatsTab } from './components/tabs/StatsTab';
-import { StaffTab } from './components/tabs/StaffTab';
-import { BreedingTab } from './components/tabs/BreedingTab';
-import { PrestigeTab } from './components/tabs/PrestigeTab';
-import { useGameState } from '@/lib/game/useGameState';
-import { formatGameClock } from '@/lib/game/engine';
-import { RightPanel } from './components/RightPanel';
-import { SettingsTab } from './components/tabs/SettingsTab';
-import { ProcessingTab } from './components/tabs/ProcessingTab';
-import { ToastHost, pushToast } from './components/ui/ToastHost';
-import { FloatingTextLayer } from './components/ui/FloatingTextLayer';
-import { ClickEffects } from './components/ui/ClickEffects';
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-const TABS = [
-  { id: 'farm', label: 'Farm', icon: 'fi fi-sr-leaf' },
-  { id: 'processing', label: 'Verarbeitung', icon: 'fi fi-sr-layers' },
-  { id: 'cases', label: 'Cases', icon: 'fi fi-sr-dice' },
-  { id: 'inventory', label: 'Inventar', icon: 'fi fi-sr-box-open' },
-  { id: 'trade', label: 'Growmarkt', icon: 'fi fi-sr-store-alt' },
-  { id: 'market', label: 'Handel', icon: 'fi fi-sr-exchange' },
-  { id: 'jobs', label: 'Jobs', icon: 'fi fi-sr-briefcase' },
-  { id: 'estate', label: 'Immobilien', icon: 'fi fi-sr-buildings' },
-  { id: 'upgrades', label: 'Upgrades', icon: 'fi fi-sr-bolt' },
-  { id: 'research', label: 'Forschung', icon: 'fi fi-sr-flask' },
-  { id: 'breeding', label: 'Kreuzung', icon: 'fi fi-sr-flask' },
-  { id: 'library', label: 'Genetik-Bibliothek', icon: 'fi fi-sr-book' },
-  { id: 'employees', label: 'Mitarbeiter', icon: 'fi fi-sr-users' },
-  { id: 'stats', label: 'Stats', icon: 'fi fi-sr-chart-line-up' },
-  { id: 'prestige', label: 'Prestige', icon: 'fi fi-sr-diamond' },
-  { id: 'inbox', label: 'Nachrichten', icon: 'fi fi-sr-envelope' },
-  { id: 'settings', label: 'Einstellungen', icon: 'fi fi-sr-settings' }
+type AuthMode = 'login' | 'register';
+
+const features = [
+  { title: 'Idle Growing', desc: 'Baue deine Farm aus, auch wenn du offline bist, und sammle Grams & Cash.' },
+  { title: 'Trading & Markt', desc: 'Dynamische Preise, Aufträge und Verhandlungen mit Händlern.' },
+  { title: 'Upgrades & Forschung', desc: 'Schalte neue Räume, Genetik und Perks frei, um effizienter zu werden.' },
+  { title: 'Prestige & Events', desc: 'Starte neu mit Haze Points und nutze Events, um schneller zu skalieren.' }
 ];
 
-export default function Page() {
-  const { state, actions, derived, ready } = useGameState();
-  const [activeTab, setActiveTab] = useState('farm');
-  const offsetTabs = useMemo(
-    () => new Set(['cases', 'inventory', 'trade', 'market', 'jobs', 'estate', 'upgrades', 'research']),
+export default function LandingPage() {
+  const router = useRouter();
+  const [authMode, setAuthMode] = useState<AuthMode | null>(null);
+
+  const heroStats = useMemo(
+    () => [
+      { label: 'Server-Save', value: 'Tenant-sicher' },
+      { label: 'Plattform', value: 'Next.js + Prisma' },
+      { label: 'Status', value: 'Beta' }
+    ],
     []
   );
-  const prevLevel = useRef(state.level);
-  const prevReadyQuests = useRef<string[]>([]);
-  const prevCompleted = useRef<string[]>([]);
-  const prevAchievements = useRef<string[]>([]);
-
-  const gameClock = useMemo(() => formatGameClock(state), [state]);
-
-  useEffect(() => {
-    if (!ready) return;
-    if (state.level > (prevLevel.current || 0)) {
-      pushToast({ title: 'Level Up!', message: `Du bist jetzt Level ${state.level}`, type: 'success' });
-      prevLevel.current = state.level;
-    }
-    const readyQuests = (state.quests || []).filter((q) => q.status === 'ready').map((q) => q.id);
-    readyQuests
-      .filter((id) => !prevReadyQuests.current.includes(id))
-      .forEach((id) => pushToast({ title: 'Quest bereit', message: `Quest ${id} kann abgeholt werden`, type: 'info' }));
-    prevReadyQuests.current = readyQuests;
-    const completed = (state.completedQuests || []);
-    completed
-      .filter((id) => !prevCompleted.current.includes(id))
-      .forEach((id) => pushToast({ title: 'Quest abgeschlossen', message: id, type: 'success' }));
-    prevCompleted.current = completed;
-    const unlocked = state.unlockedAchievements || [];
-    unlocked
-      .filter((id) => !prevAchievements.current.includes(id))
-      .forEach((id) => {
-        pushToast({ title: '🏆 Erfolg freigeschaltet', message: id, type: 'success' });
-      });
-    prevAchievements.current = unlocked;
-  }, [state.level, state.quests, ready]);
-
-  useEffect(() => {
-    const handler = () => setActiveTab('trade');
-    window.addEventListener('open-shop', handler as any);
-    return () => window.removeEventListener('open-shop', handler as any);
-  }, []);
-
-  const renderTab = (id: string) => {
-    switch (id) {
-      case 'farm':
-        return <FarmTab state={state} perSec={derived.perSec} actions={actions} />;
-      case 'processing':
-        return <ProcessingTab state={state} actions={actions} />;
-      case 'trade':
-        return <ShopTab state={state} actions={actions} />;
-      case 'inventory':
-        return <InventoryTab state={state} actions={actions} />;
-      case 'market':
-        return <MarketTab state={state} actions={actions} />;
-      case 'cases':
-        return <CasesTab state={state} actions={actions} />;
-      case 'jobs':
-        return <JobsTab state={state} actions={actions} />;
-      case 'estate':
-        return <RealEstateTab state={state} actions={actions} />;
-      case 'upgrades':
-        return <UpgradesTab state={state} actions={actions} />;
-      case 'research':
-        return <ResearchTab state={state} actions={actions} />;
-      case 'breeding':
-        return <BreedingTab state={state} actions={actions} />;
-      case 'library':
-        const LibraryTab = require('./components/tabs/LibraryTab').LibraryTab;
-        return <LibraryTab state={state} />;
-      case 'employees':
-        return <StaffTab state={state} actions={actions} />;
-      case 'stats':
-        return <StatsTab state={state} />;
-      case 'prestige':
-        return <PrestigeTab state={state} actions={actions} />;
-      case 'inbox':
-        return <InboxTab state={state} actions={actions} />;
-      case 'settings':
-        return <SettingsTab state={state} actions={actions} />;
-      default:
-        return <PlaceholderTab id={id} />;
-    }
-  };
-
-  if (!ready) {
-    return <div className="page-loading">Lade Spiel...</div>;
-  }
 
   return (
-    <div className="page-shell">
+    <div className="landing-shell">
       <div className="ambient-orbs" aria-hidden="true">
         <span className="orb"></span>
         <span className="orb"></span>
         <span className="orb"></span>
       </div>
-      <ClickEffects />
-      <FloatingTextLayer />
-      <ToastHost />
-      <HeaderHUD state={state} perSec={derived.perSec} onSpeedChange={actions.setSpeed} gameClock={gameClock} />
-      <SidebarNav tabs={TABS} active={activeTab} onSelect={setActiveTab} />
 
-      <main style={offsetTabs.has(activeTab) ? { paddingTop: '32px' } : undefined}>
-        {renderTab(activeTab)}
+      <header className="landing-nav">
+        <div className="brand">
+          <span className="logo-dot" />
+          <div>
+            <div className="brand-title">BudLife</div>
+            <div className="brand-sub">Cannabis Idle Tycoon</div>
+          </div>
+        </div>
+        <div className="nav-actions">
+          <button className="ghost-btn" onClick={() => setAuthMode('login')}>
+            Login
+          </button>
+          <button className="accent-btn" onClick={() => setAuthMode('register')}>
+            Neues Konto
+          </button>
+        </div>
+      </header>
+
+      <main className="landing-main">
+        <section className="hero">
+          <div>
+            <p className="eyebrow">Willkommen bei BudLife</p>
+            <h1>Baue, trade & prestige – dein Grow-Imperium wartet.</h1>
+            <p className="lede">
+              Modernes Idle-Gameplay mit persistentem Server-Save, Marktdynamik und Research-Progression. Komplett im
+              Browser, ohne Install.
+            </p>
+            <div className="cta-row">
+              <button className="accent-btn" onClick={() => setAuthMode('register')}>
+                Neues Konto erstellen
+              </button>
+              <button className="ghost-btn" onClick={() => setAuthMode('login')}>
+                Login
+              </button>
+            </div>
+            <div className="hero-stats">
+              {heroStats.map((stat) => (
+                <div key={stat.label} className="stat-card">
+                  <div className="stat-label">{stat.label}</div>
+                  <div className="stat-value">{stat.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="hero-card">
+            <div className="glow"></div>
+            <div className="hero-card-body">
+              <div className="hero-card-title">Live Farm</div>
+              <p className="hero-card-desc">
+                Tracke Cashflow, Aufträge und Anbau in Echtzeit. Servergespeicherte Spielstände sorgen dafür, dass du
+                jederzeit weiter zocken kannst.
+              </p>
+              <ul className="hero-list">
+                <li>Persistente Saves pro Tenant</li>
+                <li>Research & Prestige Progress</li>
+                <li>Markt- und Auftrags-Events</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section className="features">
+          {features.map((f) => (
+            <div key={f.title} className="feature-card">
+              <div className="feature-title">{f.title}</div>
+              <p className="feature-desc">{f.desc}</p>
+            </div>
+          ))}
+        </section>
+
+        <section className="auth-panel">
+          <div className="auth-panel-header">
+            <div>
+              <p className="eyebrow">Direkter Zugang</p>
+              <h2>Schnell einloggen oder neues Konto anlegen</h2>
+              <p className="lede">Keine E-Mail nötig. Tenant-basierte Saves werden automatisch geladen.</p>
+            </div>
+            <div className="cta-row">
+              <button className="accent-btn" onClick={() => setAuthMode('register')}>
+                Neues Konto
+              </button>
+              <button className="ghost-btn" onClick={() => setAuthMode('login')}>
+                Login
+              </button>
+            </div>
+          </div>
+          <div className="auth-panel-grid">
+            <AuthCard
+              title="Login"
+              description="Mit bestehendem Konto anmelden."
+              mode="login"
+              onSuccess={() => {
+                router.push('/game');
+                router.refresh();
+              }}
+            />
+            <AuthCard
+              title="Neues Konto"
+              description="Tenant anlegen, User erstellen & Spielstand starten."
+              mode="register"
+              onSuccess={() => {
+                router.push('/game');
+                router.refresh();
+              }}
+            />
+          </div>
+        </section>
       </main>
 
-      <RightPanel state={state} actions={actions} />
+      {authMode && (
+        <AuthModal
+          mode={authMode}
+          onClose={() => setAuthMode(null)}
+          onSuccess={() => {
+            setAuthMode(null);
+            router.push('/game');
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function PlaceholderTab({ id }: { id: string }) {
+function AuthModal({
+  mode,
+  onClose,
+  onSuccess
+}: {
+  mode: AuthMode;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [statusCode, setStatusCode] = useState<number | null>(null);
+
+  const title = mode === 'login' ? 'Login' : 'Neues Konto erstellen';
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    setStatusCode(null);
+    try {
+      const res = await fetch(`/api/auth/${mode === 'login' ? 'login' : 'register'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username, password })
+      });
+      setStatusCode(res.status);
+      if (!res.ok) {
+        const data = await res.json().catch(async () => {
+          const text = await res.text();
+          return { error: text || res.statusText };
+        });
+        setError(data?.error ?? 'Etwas ist schiefgelaufen.');
+      } else {
+        setSuccess('Erfolg! Weiterleitung...');
+        onSuccess();
+      }
+    } catch (err) {
+      setError('Netzwerkfehler. Bitte später erneut versuchen.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <section className="tab">
-      <div className="panel">
-        <div className="panel-header">
-          <h2>{id}</h2>
-          <span className="hint">Dieses System ist noch nicht vollständig migriert.</span>
+    <div className="modal-backdrop" role="dialog" aria-modal="true">
+      <div className="modal">
+        <div className="modal-header">
+          <h2>{title}</h2>
+          <button className="icon-btn" onClick={onClose} aria-label="Schließen">
+            ✕
+          </button>
         </div>
-        <div className="placeholder">Tab ist verdrahtet und einsatzbereit, Logik wird noch ergänzt.</div>
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            <span>Username</span>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="budmaster"
+              autoFocus
+              required
+            />
+          </label>
+          <label>
+            <span>Passwort</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="******"
+              required
+            />
+          </label>
+          {error ? <div className="form-error">{error}</div> : null}
+          {success ? <div className="form-success">{success}</div> : null}
+          {statusCode ? <div className="form-hint">HTTP {statusCode}</div> : null}
+          <button className="accent-btn full" type="submit" disabled={loading}>
+            {loading ? 'Bitte warten...' : title}
+          </button>
+        </form>
+        <p className="modal-footnote">
+          Keine E-Mail nötig. Dein Spielstand wird tenant-isoliert gespeichert.
+        </p>
       </div>
-    </section>
+    </div>
+  );
+}
+
+function AuthCard({
+  title,
+  description,
+  mode,
+  onSuccess
+}: {
+  title: string;
+  description: string;
+  mode: AuthMode;
+  onSuccess: () => void;
+}) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [statusCode, setStatusCode] = useState<number | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setStatusCode(null);
+    try {
+      const res = await fetch(`/api/auth/${mode === 'login' ? 'login' : 'register'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username, password })
+      });
+      setStatusCode(res.status);
+      if (!res.ok) {
+        const data = await res.json().catch(async () => {
+          const text = await res.text();
+          return { error: text || res.statusText };
+        });
+        setError(data?.error ?? 'Etwas ist schiefgelaufen.');
+      } else {
+        onSuccess();
+      }
+    } catch (err) {
+      setError('Netzwerkfehler. Bitte später erneut versuchen.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="auth-card">
+      <div className="feature-title">{title}</div>
+      <p className="feature-desc">{description}</p>
+      <form className="auth-form" onSubmit={handleSubmit}>
+        <label>
+          <span>Username</span>
+          <input value={username} onChange={(e) => setUsername(e.target.value)} required placeholder="budmaster" />
+        </label>
+        <label>
+          <span>Passwort</span>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            placeholder="******"
+          />
+        </label>
+        {error ? <div className="form-error">{error}</div> : null}
+        {statusCode ? <div className="form-hint">HTTP {statusCode}</div> : null}
+        <button className="accent-btn full" type="submit" disabled={loading}>
+          {loading ? 'Bitte warten...' : title}
+        </button>
+      </form>
+    </div>
   );
 }

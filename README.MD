@@ -114,6 +114,24 @@ Static game data is central here. Do not hardcode values in components; add them
 
 /public/assets     # Images \& Spritesheets
 
+## Backend & Auth Bootstrap (Prisma + Postgres)
+
+- Prisma models live in `prisma/schema.prisma` and follow a tenant-first design (`Tenant` -> `User`, `GameState` scoped to tenants with `data` as JSON and `updatedAt` timestamp).
+- Copy `.env.example` to `.env` and adjust `DATABASE_URL`/Postgres credentials before running migrations.
+- Auth secrets: set `AUTH_SECRET` (JWT signing) and optionally `SESSION_COOKIE_NAME`.
+- Generate Prisma client & format schema: `npx prisma format && npx prisma generate`.
+- Run migrations when ready to persist the schema: `npx prisma migrate dev --name init`.
+- Auth endpoints: `POST /api/auth/register` (legt Tenant, User, leeren GameState atomar an, setzt Session-Cookie), `POST /api/auth/login` (Credentials prüfen, Session-Cookie setzen).
+- Game persistence endpoints (cookie-auth): `GET /api/game/load`, `POST /api/game/save` (immer `where: { tenantId }` Isolation).
+- Frontend Flows: Landing Page unter `/` mit CTA-Modals für Login/Registrierung; nach Erfolg Redirect nach `/game`, wo der Spielstand automatisch per API geladen/gespeichert wird.
+- Secure-Cookie Hinweis: In lokalen HTTP-Umgebungen (z.B. docker-compose ohne TLS) setze `COOKIE_SECURE=false`, sonst droppen Browser das Session-Cookie.
+
+## Dockerized Stack
+
+- `docker-compose.yml` provisions `postgres:16-alpine` and builds the Next.js app image via `Dockerfile` (standalone output).
+- Default ports: app `3000`, Postgres `5432` (override via env vars).
+- Start everything: `docker compose up --build`.
+
 Coding Guidelines for AI
 
 State Updates: ALWAYS use produce from immer when modifying state in engine.ts. Never mutate state directly without produce.
@@ -173,4 +191,3 @@ Modifying Growth Speed: Adjust GAME\_DAY\_REAL\_SECONDS in data.ts or grow value
 
 
 Creating an Event: Add to spawnRandomEvent in engine.ts.
-
