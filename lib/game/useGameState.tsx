@@ -136,7 +136,6 @@ const buildActions = (setState: React.Dispatch<React.SetStateAction<GameState>>)
   startCuring: (batchId: string) => setState((s) => startCuring(s, batchId)),
   collectProcessed: (batchId: string) => setState((s) => collectProcessed(s, batchId)),
   collectAllProcessed: () => setState((s) => collectAllProcessed(s)),
-  feedPlantWithBonus: (slot: number, bonus?: number) => setState((s) => feedPlantWithBonus(s, slot, bonus)),
   pressRosin: (batchId: string) => setState((s) => pressRosin(s, batchId)),
   importSave: (payload: GameState) => setState(() => applyOfflineProgress(hydrateState(payload))),
   quickBuyApply: (type: 'water' | 'nutrient' | 'spray', slot: number, pack?: boolean) => setState((s) => quickBuyApply(s, type, slot, pack)),
@@ -155,7 +154,7 @@ export function useGameState() {
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
-        const validated = gameStateSchema.parse(parsed);
+        const validated = gameStateSchema.parse(parsed) as unknown as GameState;
         setState((s) => applyOfflineProgress(hydrateState(validated)));
       } catch (err) {
         console.warn('Konnte Spielstand nicht laden', err);

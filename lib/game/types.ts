@@ -129,6 +129,7 @@ export interface Item {
   category: string;
   effects?: ItemEffects;
   stack?: boolean;
+  rarity?: Rarity;
 }
 
 export interface Pest {
@@ -377,6 +378,7 @@ export interface GameState {
   welcomeRewarded: boolean;
   sidebarCollapsed: boolean;
   customStrains: Strain[];
+  discoveredStrains?: string[];
   employees: Record<string, EmployeeState>;
   apothekenVertraege: Record<string, boolean>;
   apothekenOffers?: Array<any>;
@@ -388,7 +390,7 @@ export interface GameState {
   inventoryFilter: string;
   inventorySort: string;
   questStep?: number;
-  quests?: QuestProgress[];
+  quests: QuestProgress[];
   activeQuests: string[];
   completedQuests: string[];
   unlockedAchievements?: string[];

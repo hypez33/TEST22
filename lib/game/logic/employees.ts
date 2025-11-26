@@ -1,5 +1,5 @@
 import { produce } from 'immer';
-import { EMPLOYEES, GROW_ROOMS } from '../data';
+import { EMPLOYEES, GROW_ROOMS, WATER_MAX } from '../data';
 import { GameState, Plant } from '../types';
 import {
   waterPlant as waterPlantAction,
@@ -204,7 +204,7 @@ export const employeeActions = (state: GameState, dt: number, deps: EmployeeDeps
     if (resting) {
       if ((working.consumables.coffee || 0) > 0) {
         working = produce(working, (draft) => {
-          draft.consumables.coffee -= 1;
+          draft.consumables.coffee = Math.max(0, (draft.consumables.coffee || 0) - 1);
           draft.employees[emp.id].energy = 100;
           draft.employees[emp.id].resting = false;
         });

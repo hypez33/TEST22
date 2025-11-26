@@ -39,8 +39,8 @@ export function SettingsTab({ state, actions }: Props) {
       return;
     }
     try {
-      const validated = gameStateSchema.parse(parsed);
-      actions.importSave(validated as GameState);
+      const validated = gameStateSchema.parse(parsed) as unknown as GameState;
+      actions.importSave(validated);
       setStatus('Import erfolgreich!');
     } catch (err: any) {
       setStatus('Import fehlgeschlagen: ' + (err?.message || 'Validierung'));

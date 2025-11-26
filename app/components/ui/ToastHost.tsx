@@ -29,7 +29,9 @@ export function ToastHost() {
       }, 3200);
     };
     listeners.add(handler);
-    return () => listeners.delete(handler);
+    return () => {
+      listeners.delete(handler);
+    };
   }, []);
 
   return (
