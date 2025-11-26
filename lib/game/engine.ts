@@ -174,7 +174,7 @@ export const createInitialState = (): GameState => ({
   purchasedCount: {},
   upgrades: {},
   theme: 'dark',
-  highContrast: false,
+  highContrast: true,
   compactMode: false,
   cash: 500000,
   level: 1,
@@ -262,6 +262,7 @@ export const hydrateState = (loaded?: Partial<GameState>): GameState => {
     draft.favorites = Array.isArray(draft.favorites) ? draft.favorites : [];
     draft.bulkConserve = !!draft.bulkConserve;
     draft.concentrates = typeof draft.concentrates === 'number' ? draft.concentrates : 0;
+    if (typeof draft.highContrast !== 'boolean') draft.highContrast = true;
     // Ensure Sub-States
     draft.research = draft.research || {};
     draft.qualityPool = draft.qualityPool || { grams: 0, weighted: 0 };
