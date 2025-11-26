@@ -398,6 +398,7 @@ export interface GameState {
   unlockedAchievements?: string[];
   soundFx?: boolean;
   breedingSlots?: { parent1: string | null; parent2: string | null };
+  lastBreedingResult?: Strain | null;
   favorites?: string[];
   bulkConserve?: boolean;
   staffEnergy?: Record<string, EmployeeState>;

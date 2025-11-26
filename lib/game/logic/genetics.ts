@@ -69,6 +69,27 @@ export const calculateHybridProfile = (p1: Strain, p2: Strain, randomFn = Math.r
   const tag = `${(p1.tag || 'H1').slice(0, 2)}${(p2.tag || 'H2').slice(-2)}`.toUpperCase();
 
   const traits = inheritTraits(p1, p2, randomFn);
+  const luckyHit = roll(randomFn) < 0.1;
+
+  let finalYield = yieldValue;
+  let finalGrow = growValue;
+  let finalQuality = qualityValue;
+
+  if (luckyHit) {
+    const yieldBoost = 1.3 + roll(randomFn) * 0.2; // 30-50%
+    const qualityBoost = 1.1 + roll(randomFn) * 0.1; // 10-20%
+    finalYield = Math.round(finalYield * yieldBoost);
+    finalQuality = parseFloat((finalQuality * qualityBoost).toFixed(2));
+    finalGrow = Math.max(20, Math.round(finalGrow * 0.9)); // -10%
+    const luckyTrait: StrainTrait = {
+      id: 'lucky_hit',
+      name: 'Lucky',
+      type: 'yield',
+      value: yieldBoost - 1,
+      desc: 'Kritischer Erfolg bei Zucht (+Ertrag, +Qualität, schnelleres Wachstum)'
+    };
+    traits.push(luckyTrait);
+  }
 
   return {
     id: `hyb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -76,9 +97,9 @@ export const calculateHybridProfile = (p1: Strain, p2: Strain, randomFn = Math.r
     tag,
     rarity: rarityOrder[rarityIdx] || 'common',
     cost: Math.max(50, Math.round((p1.cost + p2.cost) / 2)),
-    yield: yieldValue,
-    grow: growValue,
-    quality: qualityValue,
+    yield: finalYield,
+    grow: finalGrow,
+    quality: finalQuality,
     traits,
     stability,
     lineage: { p1: p1.name, p2: p2.name },
@@ -120,6 +141,7 @@ export const performBreeding = (state: GameState) => {
     draft.seeds[hybrid.id] = (draft.seeds[hybrid.id] || 0) + 1;
     draft.breedingSlots = { parent1: null, parent2: null };
     draft.caseInventory = draft.caseInventory || {};
+    draft.lastBreedingResult = hybrid;
     pushMessage(draft as GameState, `Neuer Hybrid gezüchtet: ${hybrid.name}`, 'success');
   });
 };
@@ -129,3 +151,8 @@ export const getTraitMultiplier = (state: GameState, plant: Plant, type: TraitTy
   const traits = strain.traits || [];
   return traits.reduce((m, t) => (t.type === type ? m * (1 + t.value) : m), 1);
 };
+
+export const dismissBreedingResult = (state: GameState) =>
+  produce(state, (draft) => {
+    draft.lastBreedingResult = null;
+  });

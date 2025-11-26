@@ -33,6 +33,7 @@ import {
   setEmployeeResting,
   performBreeding,
   setBreedingParent,
+  dismissBreedingResult,
   buyContract,
   fireContract,
   fireJob,
@@ -142,7 +143,8 @@ const buildActions = (setState: React.Dispatch<React.SetStateAction<GameState>>)
   setBreedingParent: (parent: 1 | 2, strain: string | null) => setState((s) => setBreedingParent(s, parent, strain)),
   performBreeding: () => setState((s) => performBreeding(s)),
   buyContract: (id: string) => setState((s) => buyContract(s, id)),
-  fireContract: (id: string) => setState((s) => fireContract(s, id))
+  fireContract: (id: string) => setState((s) => fireContract(s, id)),
+  dismissBreedingResult: () => setState((s) => dismissBreedingResult(s))
 });
 
 export function useGameState() {

@@ -6,6 +6,7 @@ import { getAllStrains } from '@/lib/game/engine';
 import { fmtNumber } from '@/lib/game/utils';
 import { POSSIBLE_TRAITS } from '@/lib/game/data';
 import { Tooltip } from '../ui/Tooltip';
+import { BreedingResultModal } from '../modals/BreedingResultModal';
 
 interface Props {
   state: GameState;
@@ -89,6 +90,7 @@ export function BreedingTab({ state, actions }: Props) {
   };
 
   const ready = slots.parent1 && slots.parent2 && slots.parent1 !== slots.parent2;
+  const showResult = !!state.lastBreedingResult;
 
   return (
     <section id="tab-breeding" className="tab">
@@ -156,6 +158,9 @@ export function BreedingTab({ state, actions }: Props) {
           </button>
         </div>
       </div>
+      {showResult && state.lastBreedingResult && (
+        <BreedingResultModal strain={state.lastBreedingResult} onClose={() => actions.dismissBreedingResult?.()} />
+      )}
     </section>
   );
 }

@@ -106,7 +106,8 @@ import {
   performBreeding as performBreedingGenetics,
   setBreedingParent as setBreedingParentGenetics,
   calculateHybridProfile,
-  getTraitMultiplier
+  getTraitMultiplier,
+  dismissBreedingResult
 } from './logic/genetics';
 
 import {
@@ -142,7 +143,7 @@ export {
   researchEffects, itemCost, seedCost, upgradeCost, slotUnlockCost, xpForNext,
   masteryLevelFor, currentMaxSlots, currentGrowRoom, clampYield,
   // Genetics
-  calculateHybridProfile, getTraitMultiplier, performBreedingGenetics as performBreeding, setBreedingParentGenetics as setBreedingParent
+  calculateHybridProfile, getTraitMultiplier, performBreedingGenetics as performBreeding, setBreedingParentGenetics as setBreedingParent, dismissBreedingResult
 };
 
 export { SAVE_KEY };
