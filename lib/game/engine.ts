@@ -1,12 +1,15 @@
 import {
   APOTHEKEN_VERTRAEGE,
   CASE_RARITIES,
+  CONSUMABLE_PACKS,
   DAYS_PER_YEAR,
   GAME_DAY_REAL_SECONDS,
   RESEARCH_TREE,
   SAVE_KEY,
   STRAINS,
-  POSSIBLE_TRAITS
+  POSSIBLE_TRAITS,
+  ITEMS,
+  buildCaseConfigs
 } from './data';
 import { CaseStats, CartEntry, GameState, Plant, QuestProgress, Rarity, Strain, StrainTrait } from './types';
 import { QUESTS } from './quests';
@@ -132,6 +135,8 @@ export {
   maybeApplyRandomNews
 } from './logic/market';
 export { hireEmployee, upgradeEmployee, fireEmployee, setEmployeeResting } from './logic/employees';
+export const buyEstate = (state: GameState, id: string) => buyEstateLogic(state, id);
+export const sellEstate = (state: GameState, id: string) => sellEstateLogic(state, id);
 export {
   createPlant,
   ensurePlantDefaults,
@@ -659,6 +664,158 @@ export const applyOfflineProgress = (state: GameState) => {
 export const getSalePricePerGram = (state: GameState) => getSalePricePerGramMarket(state);
 
 export const calcPrestigeGain = (totalEarned: number) => Math.floor(Math.pow(totalEarned / 10000, 0.5));
+
+// Messages
+export const addMessage = (state: GameState, text: string, type = 'info') =>
+  produce(state, (draft) => {
+    const id = draft.nextMsgId || 1;
+    draft.nextMsgId = id + 1;
+    draft.messages.push({ id, text, type, createdAt: Date.now(), unread: true });
+    draft.unreadMessages = (draft.unreadMessages || 0) + 1;
+  });
+
+export const markMessagesRead = (state: GameState) =>
+  produce(state, (draft) => {
+    draft.messages = (draft.messages || []).map((m) => ({ ...m, unread: false }));
+    draft.unreadMessages = 0;
+  });
+
+// Cart & shop
+export const addToCart = (state: GameState, entry: CartEntry) =>
+  produce(state, (draft) => {
+    draft.cart = draft.cart || [];
+    const idx = draft.cart.findIndex((c) => c.id === entry.id && c.kind === entry.kind);
+    if (idx >= 0) draft.cart[idx].qty += entry.qty;
+    else draft.cart.push({ ...entry });
+  });
+
+export const removeCartEntry = (state: GameState, id: string) =>
+  produce(state, (draft) => {
+    draft.cart = (draft.cart || []).filter((c) => c.id !== id);
+  });
+
+export const clearCart = (state: GameState) =>
+  produce(state, (draft) => {
+    draft.cart = [];
+  });
+
+export const buyItem = (state: GameState, itemId: string) => {
+  const item = ITEMS.find((i) => i.id === itemId);
+  if (!item) return state;
+  const stackable = !!item.stack;
+  const owned = state.itemsOwned[item.id] || 0;
+  if (!stackable && owned >= 1) return state;
+  const cost = itemCost(state, itemId);
+  if (state.cash < cost) return state;
+  return produce(state, (draft) => {
+    draft.cash -= cost;
+    draft.itemsOwned[itemId] = (draft.itemsOwned[itemId] || 0) + 1;
+  });
+};
+
+export const buyConsumablePack = (state: GameState, packId: string) => {
+  const pack = CONSUMABLE_PACKS.find((p) => p.id === packId);
+  if (!pack) return state;
+  if (state.cash < pack.price) return state;
+  return produce(state, (draft) => {
+    draft.cash -= pack.price;
+    ensureConsumables(draft);
+    draft.consumables.nutrient += pack.add.nutrient || 0;
+    draft.consumables.water += pack.add.water || 0;
+    draft.consumables.spray += pack.add.spray || 0;
+    draft.consumables.fungicide += pack.add.fungicide || 0;
+    draft.consumables.beneficials += pack.add.beneficials || 0;
+  });
+};
+
+export const checkoutCart = (state: GameState) => {
+  let total = 0;
+  for (const entry of state.cart || []) {
+    if (entry.kind === 'seed') total += seedCost(state, entry.id, state.purchasedCount[entry.id] || 0) * entry.qty;
+    if (entry.kind === 'item') total += itemCost(state, entry.id) * entry.qty;
+    if (entry.kind === 'consumable') {
+      const pack = CONSUMABLE_PACKS.find((p) => p.id === entry.id);
+      if (pack) total += pack.price * entry.qty;
+    }
+  }
+  if ((state.cash || 0) < total) return state;
+  return produce(state, (draft) => {
+    draft.cash -= total;
+    for (const entry of draft.cart || []) {
+      if (entry.kind === 'seed') {
+        draft.purchasedCount[entry.id] = (draft.purchasedCount[entry.id] || 0) + entry.qty;
+        draft.seeds[entry.id] = (draft.seeds[entry.id] || 0) + entry.qty;
+      } else if (entry.kind === 'item') {
+        draft.itemsOwned[entry.id] = (draft.itemsOwned[entry.id] || 0) + entry.qty;
+      } else if (entry.kind === 'consumable') {
+        const pack = CONSUMABLE_PACKS.find((p) => p.id === entry.id);
+        if (pack) {
+          ensureConsumables(draft);
+          draft.consumables.nutrient += (pack.add.nutrient || 0) * entry.qty;
+          draft.consumables.water += (pack.add.water || 0) * entry.qty;
+          draft.consumables.spray += (pack.add.spray || 0) * entry.qty;
+          draft.consumables.fungicide += (pack.add.fungicide || 0) * entry.qty;
+          draft.consumables.beneficials += (pack.add.beneficials || 0) * entry.qty;
+        }
+      }
+    }
+    draft.cart = [];
+  });
+};
+
+// Cases
+const rarityOrder = (rarity: Rarity) => CASE_RARITIES.indexOf(rarity);
+const rarityEmoji = (rarity: Rarity) => {
+  switch (rarity) {
+    case 'common':
+      return '🟢';
+    case 'uncommon':
+      return '🔵';
+    case 'rare':
+      return '🟣';
+    case 'epic':
+      return '🟠';
+    case 'legendary':
+      return '🟡';
+    default:
+      return '❔';
+  }
+};
+
+export const openCase = (state: GameState, caseId: string, fast = false) => {
+  const configs = buildCaseConfigs();
+  const cfg = configs.find((c) => c.id === caseId);
+  if (!cfg) return state;
+  const available = state.caseInventory?.[caseId] || 0;
+  if (available <= 0) return state;
+  return produce(state, (draft) => {
+    draft.caseInventory[caseId] = Math.max(0, available - 1);
+    draft.caseStats = draft.caseStats || defaultCaseStats();
+    if (fast) draft.caseStats.fastOpened = (draft.caseStats.fastOpened || 0) + 1;
+    const loot = cfg.lootBuilder();
+    const totalWeight = loot.reduce((a, l) => a + l.weight, 0);
+    let roll = Math.random() * totalWeight;
+    let winner = loot[0];
+    for (const l of loot) {
+      if ((roll -= l.weight) <= 0) {
+        winner = l;
+        break;
+      }
+    }
+    const strain = STRAINS.find((s) => s.id === winner.strainId);
+    if (strain) draft.seeds[strain.id] = (draft.seeds[strain.id] || 0) + 1;
+    draft.caseStats.opened = (draft.caseStats.opened || 0) + 1;
+    draft.caseStats.lastDrop = strain?.name || winner.strainId;
+    draft.caseStats.lastRarity = winner.rarity;
+    draft.caseStats.lastEmoji = rarityEmoji(winner.rarity);
+    if (!draft.caseStats.bestRarity || rarityOrder(winner.rarity) > rarityOrder(draft.caseStats.bestRarity as Rarity)) {
+      draft.caseStats.bestDrop = draft.caseStats.lastDrop;
+      draft.caseStats.bestRarity = winner.rarity;
+      draft.caseStats.bestEmoji = draft.caseStats.lastEmoji;
+    }
+    addXP(draft as any, 6);
+  });
+};
 
 export const toggleTheme = (state: GameState, theme: 'light' | 'dark') =>
   produce(state, (draft) => {
