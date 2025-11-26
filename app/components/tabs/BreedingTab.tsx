@@ -5,6 +5,7 @@ import { GameActions } from '@/lib/game/useGameState';
 import { getAllStrains } from '@/lib/game/engine';
 import { fmtNumber } from '@/lib/game/utils';
 import { POSSIBLE_TRAITS } from '@/lib/game/data';
+import { Tooltip } from '../ui/Tooltip';
 
 interface Props {
   state: GameState;
@@ -25,6 +26,12 @@ export function BreedingTab({ state, actions }: Props) {
           quality: (strainA.quality + strainB.quality) / 2
         }
       : null;
+  const stabilityProjection = (() => {
+    const s1 = strainA?.stability ?? 0.8;
+    const s2 = strainB?.stability ?? 0.8;
+    const avg = ((s1 + s2) / 2) * 0.9;
+    return Math.round(Math.max(0.1, Math.min(1, avg)) * 100);
+  })();
   const possibleTraits = () => {
     if (!strainA || !strainB) return [];
     const set = new Map<string, any>();
@@ -34,6 +41,21 @@ export function BreedingTab({ state, actions }: Props) {
       Object.values(POSSIBLE_TRAITS).slice(0, 3).forEach((t) => set.set(t.id, t));
     }
     return Array.from(set.values());
+  };
+
+  const renderTraitBadges = (traits?: any[]) => {
+    if (!traits || traits.length === 0) return null;
+    return (
+      <div className="trait-badges">
+        {traits.map((t) => (
+          <Tooltip key={t.id} content={`${t.name}: ${t.desc}`}>
+            <span className={`trait-badge ${t.isNegative ? 'negative' : ''}`} title={t.desc}>
+              {t.name.slice(0, 2)}
+            </span>
+          </Tooltip>
+        ))}
+      </div>
+    );
   };
 
   const renderSlot = (parent: 1 | 2) => {
@@ -47,6 +69,7 @@ export function BreedingTab({ state, actions }: Props) {
             <button className="remove-seed" onClick={() => actions.setBreedingParent(parent, null)}>
               X
             </button>
+            {renderTraitBadges(strain.traits)}
           </div>
         ) : (
           <select value={selected || ''} onChange={(e) => actions.setBreedingParent(parent, e.target.value || null)}>
@@ -102,13 +125,22 @@ export function BreedingTab({ state, actions }: Props) {
                         <span>Ø Qualität: {avgStats.quality.toFixed(2)}</span>
                       </div>
                     )}
+                    <div className="hybrid-preview-stability">
+                      <div className="label">Prognose Stabilität</div>
+                      <div className="stability-bar">
+                        <div className="stability-fill" style={{ width: `${stabilityProjection}%` }} />
+                      </div>
+                      <span className="stability-text">{stabilityProjection}%</span>
+                    </div>
                     <div className="hybrid-preview-traits">
-                      <div className="label">Mögliche Traits:</div>
+                      <div className="label">Mögliche Traits (vererbbar?):</div>
                       <div className="trait-list">
                         {possibleTraits().map((t) => (
-                          <span key={t.id} className={`trait-badge ${t.isNegative ? 'negative' : ''}`}>
-                            {t.name}
-                          </span>
+                          <Tooltip key={t.id} content={`${t.name}: ${t.desc}`}>
+                            <span className={`trait-badge ${t.isNegative ? 'negative' : ''}`}>
+                              {t.name}
+                            </span>
+                          </Tooltip>
                         ))}
                       </div>
                     </div>

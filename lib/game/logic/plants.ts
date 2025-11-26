@@ -37,10 +37,10 @@ import {
   seedCost,
   slotUnlockCost,
   traitMultiplier,
-  traitSpeedMultiplier
 } from './shared';
 import { clamp } from '../utils';
 import { ensureProcessing, fillDryingSlots } from './processing';
+import { getTraitMultiplier } from './genetics';
 
 export const WATER_COST = 0.2;
 export const WATER_COST_PER_USE = WATER_COST;
@@ -135,7 +135,7 @@ export const harvestYieldDetails = (state: GameState, plant: Plant) => {
   const cap = rarityCaps[(strain.rarity || 'common').toLowerCase()] || 800;
   const researchMult = 1 + (res.yield || 0);
   const globalMult = globalMultiplier(state);
-  const traitYield = traitMultiplier(strain, 'yield');
+  const traitYield = getTraitMultiplier(state, plant, 'yield');
   const traitQuality = traitMultiplier(strain, 'quality');
   const raw = base * flowerBonus * levelMult * researchMult * globalMult * bonus * masteryYield * timingBonus * traitYield * traitQuality;
   const value = clampYield(raw, cap);
@@ -223,7 +223,7 @@ export const advancePlant = (state: GameState, plant: Plant, delta: number) => {
   const strain = getStrain(state, plant.strainId);
   const growTime = growTimeFor(state, plant);
   const res = researchEffects(state);
-  const waterTrait = Math.max(0.1, traitMultiplier(strain, 'water'));
+  const waterTrait = Math.max(0.1, getTraitMultiplier(state, plant, 'water'));
   const waterDrain = WATER_DRAIN_PER_SEC * (state.eventWaterMult || 1) * (1 - (res.water || 0)) * waterTrait;
   const nutrientDrain = NUTRIENT_DRAIN_PER_SEC;
 
@@ -237,7 +237,8 @@ export const advancePlant = (state: GameState, plant: Plant, delta: number) => {
     const goodNutrient = nutrientRatio >= 0.4 && nutrientRatio <= 0.8;
 
     const d = DIFFICULTIES[state.difficulty] || DIFFICULTIES.normal;
-    let growthFactor = d.growth * (state.growthBonus || 1) * traitSpeedMultiplier(strain);
+    const traitGrowth = getTraitMultiplier(state, plant, 'growth');
+    let growthFactor = d.growth * (state.growthBonus || 1) * traitGrowth;
     let healthDelta = 0;
     let qualityDelta = 0;
 

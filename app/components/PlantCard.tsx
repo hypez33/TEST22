@@ -163,15 +163,6 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
             Timer <span>{formatTimer(timer)}</span>
           </div>
           <div className="plant-health">Vitalität {Math.round(plant.health)}%</div>
-          {traitBadges.length > 0 && (
-            <div className="plant-traits">
-              {traitBadges.map((t) => (
-                <span key={t.id} className={`trait-badge ${t.isNegative ? 'negative' : ''}`} title={t.desc}>
-                  {t.name}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       <div className="plant-prod" title="Ertrag je Ernte (trocken)">
           <Tooltip content={<YieldTooltip breakdown={yieldInfo.breakdown} qualityMult={qualityMult} />}>
@@ -179,6 +170,17 @@ export function PlantCard({ plant, strain, state, actions }: Props) {
           </Tooltip>
         </div>
       </div>
+      {traitBadges.length > 0 && (
+        <div className="plant-trait-row">
+          {traitBadges.map((t) => (
+            <Tooltip key={t.id} content={`${t.name}: ${t.desc}`}>
+              <span className={`trait-badge small ${t.isNegative ? 'negative' : ''}`} title={t.desc}>
+                {t.name.slice(0, 2)}
+              </span>
+            </Tooltip>
+          ))}
+        </div>
+      )}
       <div className="plant-infobar">
         <span className="pill muted">{statuses[0]}</span>
         {plant.pest ? <span className="pill danger">Schädlinge</span> : <span className="pill">Stabil</span>}

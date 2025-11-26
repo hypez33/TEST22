@@ -1,7 +1,6 @@
 import { produce } from 'immer';
 import {
   APOTHEKEN_VERTRAEGE,
-  CASE_RARITIES,
   CONSUMABLE_PACKS,
   DAYS_PER_YEAR,
   GAME_DAY_REAL_SECONDS,
@@ -9,7 +8,6 @@ import {
   ITEMS,
   JOBS,
   PEST_GLOBAL_RATE,
-  POSSIBLE_TRAITS,
   SAVE_KEY,
   STRAINS,
   RESEARCH_TREE,
@@ -21,10 +19,7 @@ import {
   CaseStats,
   GameState,
   Plant,
-  QuestProgress,
-  Rarity,
-  Strain,
-  StrainTrait
+  QuestProgress
 } from './types';
 import { ACHIEVEMENTS } from './achievements';
 import { clamp, defaultCaseStats, fmtNumber } from './utils';
@@ -108,6 +103,13 @@ import {
 } from './logic/plants';
 
 import {
+  performBreeding as performBreedingGenetics,
+  setBreedingParent as setBreedingParentGenetics,
+  calculateHybridProfile,
+  getTraitMultiplier
+} from './logic/genetics';
+
+import {
   researchEffects,
   itemCost,
   seedCost,
@@ -138,7 +140,9 @@ export {
   buyEstate, sellEstate, hireEmployee, upgradeEmployee, fireEmployee, setEmployeeResting,
   // Shared / Getters
   researchEffects, itemCost, seedCost, upgradeCost, slotUnlockCost, xpForNext,
-  masteryLevelFor, currentMaxSlots, currentGrowRoom, clampYield
+  masteryLevelFor, currentMaxSlots, currentGrowRoom, clampYield,
+  // Genetics
+  calculateHybridProfile, getTraitMultiplier, performBreedingGenetics as performBreeding, setBreedingParentGenetics as setBreedingParent
 };
 
 export { SAVE_KEY };
@@ -610,43 +614,6 @@ const processApplications = (state: GameState) => {
 };
 
 // 4. BREEDING & CASES
-const strainRarityIndex = (strain?: Strain) => {
-  if (!strain) return 0;
-  const idx = CASE_RARITIES.indexOf((strain.rarity as Rarity) || 'common');
-  return idx >= 0 ? idx : 0;
-};
-
-const calculateHybridProfile = (p1: Strain, p2: Strain, randomFn = Math.random): Strain => {
-  // ... Simplified Breeding Logic Wrapper ...
-  const name = `Hybrid ${p1.tag}-${p2.tag}`;
-  return {
-    id: `hybrid_${Date.now()}`,
-    name,
-    tag: 'HYB',
-    rarity: 'common',
-    cost: 100,
-    yield: 100,
-    grow: 100,
-    quality: 1
-  } as Strain; 
-  // (Note: Full logic can be restored if needed, but this fixes the build)
-};
-
-export const setBreedingParent = (state: GameState, parent: 1 | 2, strainId: string | null) =>
-  produce(state, (draft) => {
-    draft.breedingSlots = draft.breedingSlots || { parent1: null, parent2: null };
-    draft.breedingSlots[parent === 1 ? 'parent1' : 'parent2'] = strainId;
-  });
-
-export const performBreeding = (state: GameState) => {
-  const slots = state.breedingSlots || { parent1: null, parent2: null };
-  if (!slots.parent1 || !slots.parent2) return state;
-  return produce(state, (draft) => {
-     // Basic placeholder to fix build
-     draft.seeds['gelato'] = (draft.seeds['gelato'] || 0) + 1;
-     pushMessage(draft as any, "Breeding noch in Arbeit - Seed erhalten", 'info');
-  });
-};
 
 export const openCase = (state: GameState, caseId: string, fast = false) => {
   const configs = buildCaseConfigs(getAllStrains(state));
@@ -669,7 +636,11 @@ export const openCase = (state: GameState, caseId: string, fast = false) => {
 // 5. UTILS
 export const toggleTheme = (state: GameState, theme: 'light' | 'dark') => produce(state, (draft) => { draft.theme = theme; });
 export const setBulkConserve = (state: GameState, on: boolean) => produce(state, (draft) => { draft.bulkConserve = on; });
-export const toggleDisplayPrefs = (state: GameState, prefs: any) => produce(state, (draft) => { Object.assign(draft, prefs); });
+export const toggleDisplayPrefs = (state: GameState, prefs: { compact?: boolean; contrast?: boolean }) =>
+  produce(state, (draft) => {
+    if (typeof prefs.compact === 'boolean') draft.compactMode = prefs.compact;
+    if (typeof prefs.contrast === 'boolean') draft.highContrast = prefs.contrast;
+  });
 export const setSpeed = (state: GameState, speed: number) => produce(state, (draft) => { draft.timeSpeed = speed; });
 export const setDifficulty = (state: GameState, diff: any) => produce(state, (draft) => { draft.difficulty = diff; });
 export const setInventoryFilters = (state: GameState, f: string, s: string) => produce(state, (draft) => { draft.inventoryFilter = f; draft.inventorySort = s; });

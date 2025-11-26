@@ -18,6 +18,8 @@ export interface Strain {
   stages?: string[];
   generation?: number;
   traits?: StrainTrait[];
+  stability?: number;
+  lineage?: { p1: string; p2: string };
 }
 
 export type TraitType = 'yield' | 'growth' | 'water' | 'pest' | 'quality' | 'price';
