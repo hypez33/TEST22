@@ -6,9 +6,10 @@ import { attachSessionCookie, createSessionToken, hashPassword } from '@/lib/aut
 const registerSchema = z.object({
   username: z
     .string()
+    .trim()
     .min(3, 'Username zu kurz')
     .max(32, 'Username zu lang')
-    .regex(/^[a-zA-Z0-9_-]+$/, 'Nur Buchstaben, Zahlen, -, _ erlaubt'),
+    .regex(/^[a-zA-Z0-9._@-]+$/, 'Nur Buchstaben, Zahlen, ., _, -, @ erlaubt'),
   password: z.string().min(6, 'Passwort zu kurz').max(128, 'Passwort zu lang')
 });
 
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
   const parsed = registerSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Ungültige Eingaben', details: parsed.error.flatten() }, { status: 400 });
+    return NextResponse.json({ error: 'Ungültige Eingaben', details: parsed.error.flatten().formErrors }, { status: 400 });
   }
 
   const { username, password } = parsed.data;
