@@ -120,6 +120,33 @@ import {
   WATER_COST
 } from './logic/plants';
 export { clampYield, currentGrowRoom, currentMaxSlots, itemCost, masteryLevelFor, researchEffects, seedCost, slotUnlockCost, upgradeCost, xpForNext } from './logic/shared';
+export {
+  ensureProcessing,
+  fillDryingSlots,
+  advanceProcessing,
+  startDrying,
+  startCuring,
+  collectProcessed,
+  collectAllProcessed,
+  pressRosin
+} from './logic/processing';
+export {
+  getSalePricePerGram,
+  sellGrams,
+  sellToBuyer,
+  spawnOffer,
+  acceptOffer,
+  declineOffer,
+  spawnApothekenOffer,
+  deliverApotheke,
+  spawnOrder,
+  deliverOrder,
+  declineOrder,
+  spawnMarketEvent,
+  triggerMarketEvent,
+  marketDrift,
+  maybeApplyRandomNews
+} from './logic/market';
 
 export const SPEED_OPTIONS = [0, 0.5, 1, 2, 7];
 const SAVE_VERSION = 2;

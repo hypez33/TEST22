@@ -219,66 +219,64 @@ const pestDefById = (id: string) => {
 
 export const advancePlant = (state: GameState, plant: Plant, delta: number) => {
   ensurePlantDefaults(plant);
-  let remaining = delta;
+  if (delta <= 0) return;
   const strain = getStrain(state, plant.strainId);
   const growTime = growTimeFor(state, plant);
-  while (remaining > 0) {
-    const step =
-      remaining > 3600 ? 60 :
-      remaining > 600 ? 20 :
-      remaining > 120 ? 10 :
-      remaining > 30 ? 5 :
-      Math.min(remaining, 1);
-    const res = researchEffects(state);
-    const waterMult = state.eventWaterMult || 1;
-    const waterTrait = Math.max(0.1, traitMultiplier(strain, 'water'));
-    plant.water = clamp(plant.water - WATER_DRAIN_PER_SEC * waterMult * (1 - (res.water || 0)) * waterTrait * step, 0, WATER_MAX);
-    plant.nutrients = clamp(plant.nutrients - NUTRIENT_DRAIN_PER_SEC * step, 0, NUTRIENT_MAX);
+  const res = researchEffects(state);
+  const waterTrait = Math.max(0.1, traitMultiplier(strain, 'water'));
+  const waterDrain = WATER_DRAIN_PER_SEC * (state.eventWaterMult || 1) * (1 - (res.water || 0)) * waterTrait;
+  const nutrientDrain = NUTRIENT_DRAIN_PER_SEC;
 
+  let remaining = delta;
+  let pgrLeft = plant.pgrBoostSec || 0;
+
+  const segment = (dt: number) => {
     const waterRatio = plant.water / WATER_MAX;
     const nutrientRatio = plant.nutrients / NUTRIENT_MAX;
     const goodWater = waterRatio >= 0.4 && waterRatio <= 0.85;
     const goodNutrient = nutrientRatio >= 0.4 && nutrientRatio <= 0.8;
 
     const d = DIFFICULTIES[state.difficulty] || DIFFICULTIES.normal;
-    let growthFactor = d.growth * (state.growthBonus || 1);
-    growthFactor *= traitSpeedMultiplier(strain);
+    let growthFactor = d.growth * (state.growthBonus || 1) * traitSpeedMultiplier(strain);
     let healthDelta = 0;
     let qualityDelta = 0;
-    if (plant.pgrBoostSec && plant.pgrBoostSec > 0) {
+
+    const pgrActive = pgrLeft > 0;
+    const pgrUse = Math.min(pgrLeft, dt);
+    if (pgrActive) {
       growthFactor *= 1.25;
-      qualityDelta -= 0.002 * step;
-      plant.pgrBoostSec = Math.max(0, plant.pgrBoostSec - step);
+      qualityDelta -= 0.002 * pgrUse;
+      pgrLeft = Math.max(0, pgrLeft - dt);
     }
 
     if (plant.water <= 0) {
-      healthDelta -= HEALTH_DECAY_DRY * step;
-      qualityDelta -= QUALITY_LOSS_BAD * step;
+      healthDelta -= HEALTH_DECAY_DRY * dt;
+      qualityDelta -= QUALITY_LOSS_BAD * dt;
       growthFactor *= 0.05;
     } else if (waterRatio < 0.25) {
-      healthDelta -= (HEALTH_DECAY_DRY / 2) * step;
-      qualityDelta -= (QUALITY_LOSS_BAD / 2) * step;
+      healthDelta -= (HEALTH_DECAY_DRY / 2) * dt;
+      qualityDelta -= (QUALITY_LOSS_BAD / 2) * dt;
       growthFactor *= 0.35;
     } else if (waterRatio > 0.9) {
-      qualityDelta -= 0.02 * step;
+      qualityDelta -= 0.02 * dt;
       growthFactor *= 0.8;
     } else if (goodWater) {
-      qualityDelta += QUALITY_GAIN_GOOD * step;
-      healthDelta += HEALTH_RECOVER_RATE * 0.3 * step;
+      qualityDelta += QUALITY_GAIN_GOOD * dt;
+      healthDelta += HEALTH_RECOVER_RATE * 0.3 * dt;
     }
 
     if (plant.nutrients <= 0) {
-      healthDelta -= HEALTH_DECAY_HUNGRY * step;
-      qualityDelta -= QUALITY_LOSS_BAD * step;
+      healthDelta -= HEALTH_DECAY_HUNGRY * dt;
+      qualityDelta -= QUALITY_LOSS_BAD * dt;
       growthFactor *= 0.25;
     } else if (nutrientRatio < 0.3) {
-      healthDelta -= (HEALTH_DECAY_HUNGRY / 2) * step;
-      qualityDelta -= (QUALITY_LOSS_BAD / 2) * step;
+      healthDelta -= (HEALTH_DECAY_HUNGRY / 2) * dt;
+      qualityDelta -= (QUALITY_LOSS_BAD / 2) * dt;
       growthFactor *= 0.5;
     } else if (nutrientRatio > 0.9) {
-      qualityDelta -= 0.015 * step;
+      qualityDelta -= 0.015 * dt;
     } else if (goodNutrient) {
-      qualityDelta += QUALITY_GAIN_GOOD * 0.8 * step;
+      qualityDelta += QUALITY_GAIN_GOOD * 0.8 * dt;
     }
 
     if (plant.health < 40) growthFactor *= 0.6;
@@ -289,41 +287,56 @@ export const advancePlant = (state: GameState, plant: Plant, delta: number) => {
     }
 
     if (!plant.pest) {
-      maybeSpawnPestFor(state, plant, strain, step, waterRatio, nutrientRatio);
+      maybeSpawnPestFor(state, plant, strain, dt, waterRatio, nutrientRatio);
     } else {
       const pestDef = pestDefById(plant.pest.id) || { effect: { growth: 0.8, health: -1, quality: -0.01 } };
-      const sev = plant.pest.sev || 1;
-      growthFactor *= Math.max(0.2, (pestDef.effect.growth || 1));
-      healthDelta += (pestDef.effect.health || 0) * (0.5 + 0.5 * sev) * step;
-      qualityDelta += (pestDef.effect.quality || 0) * (0.5 + 0.5 * sev) * step;
-      plant.pest.sev = Math.min(3, sev + 0.04 * step);
+      const sevStart = plant.pest.sev || 1;
+      const sevEnd = Math.min(3, sevStart + 0.04 * dt);
+      const sevAvg = (sevStart + sevEnd) / 2;
+      growthFactor *= Math.max(0.2, pestDef.effect.growth || 1);
+      healthDelta += (pestDef.effect.health || 0) * (0.5 + 0.5 * sevAvg) * dt;
+      qualityDelta += (pestDef.effect.quality || 0) * (0.5 + 0.5 * sevAvg) * dt;
+      plant.pest.sev = sevEnd;
     }
     if (plant.health > 85 && goodWater && goodNutrient) growthFactor *= 1.1;
 
     if (plant.growProg < 1) {
-      plant.growProg = clamp(plant.growProg + (step / growTime) * growthFactor, 0, 1);
+      plant.growProg = clamp(plant.growProg + (dt / growTime) * growthFactor, 0, 1);
       if (plant.growProg >= 1) plant.readyTime = 0;
     } else {
-      plant.readyTime = (plant.readyTime || 0) + step;
+      plant.readyTime = (plant.readyTime || 0) + dt;
       if (plant.readyTime > READY_DECAY_DELAY) {
-        qualityDelta -= (QUALITY_LOSS_BAD / 2) * step;
+        qualityDelta -= (QUALITY_LOSS_BAD / 2) * dt;
       }
     }
 
     if (goodWater && goodNutrient && plant.growProg < 1 && plant.health > 50) {
-      healthDelta += HEALTH_RECOVER_RATE * step;
+      healthDelta += HEALTH_RECOVER_RATE * dt;
     }
 
     plant.health = clamp(plant.health + healthDelta, 0, 100);
     plant.quality = clamp(plant.quality + qualityDelta, 0.4, 1.5);
+  };
 
+  for (let i = 0; i < 5 && remaining > 0; i++) {
+    const timeUntilThirsty = waterDrain > 0 ? plant.water / waterDrain : Infinity;
+    const timeUntilHungry = nutrientDrain > 0 ? plant.nutrients / nutrientDrain : Infinity;
+    const timeUntilPgrEnds = pgrLeft > 0 ? pgrLeft : Infinity;
+    const seg = Math.min(remaining, timeUntilThirsty, timeUntilHungry, timeUntilPgrEnds);
+    const dt = seg === Infinity ? remaining : seg;
+
+    segment(dt);
+
+    // apply resource drains for the segment
+    if (waterDrain > 0) plant.water = clamp(plant.water - waterDrain * dt, 0, WATER_MAX);
+    if (nutrientDrain > 0) plant.nutrients = clamp(plant.nutrients - nutrientDrain * dt, 0, NUTRIENT_MAX);
+
+    remaining -= dt;
     if (plant.health <= 0) {
       plant.health = 0;
       plant.growProg = Math.min(plant.growProg, 0.1);
       break;
     }
-
-    remaining -= step;
   }
 };
 
