@@ -263,3 +263,10 @@ export const maybeApplyRandomNews = (state: GameState, worldDt: number, pushMess
 
 export const currentSpawnWindowForState = currentSpawnWindow;
 export const currentMaxOffersForState = currentMaxOffers;
+
+export const cleanExpiredOffers = (state: GameState) => {
+  const now = Date.now();
+  state.offers = (state.offers || []).filter((o) => o.expiresAt > now);
+  state.apothekenOffers = (state.apothekenOffers || []).filter((o) => o.expiresAt > now);
+  state.orders = (state.orders || []).filter((o: any) => o.expiresAt > now);
+};
