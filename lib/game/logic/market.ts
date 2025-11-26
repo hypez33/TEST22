@@ -3,6 +3,7 @@ import { BASE_PRICE_PER_G, ITEMS, MAX_ACTIVE_OFFERS_BASE, OFFER_SPAWN_MAX, OFFER
 import { clamp } from '../utils';
 import { GameState } from '../types';
 import { itemPriceMultiplier } from './shared';
+import { getStrain } from './plants';
 
 type MarketEvent = { type: string; name: string; desc: string; duration: number };
 
@@ -49,8 +50,30 @@ export const getSalePricePerGram = (state: GameState) => {
   const newsMult = state.marketNewsMult || 1;
   const itemMult = itemPriceMultiplier(state);
   const avgQ = (state.qualityPool.grams || 0) > 0 ? state.qualityPool.weighted / state.qualityPool.grams : 1;
-  const qMult = 1 + clamp(avgQ - 1, -0.6, 2);
-  return base * trendMult * newsMult * itemMult * qMult;
+  // Exponentielle Qualitäts-Kurve
+  const qualityFactor = Math.pow(Math.max(0.1, avgQ), 2.5);
+
+  // Markt-Hype verstärkt Qualitätseffekt
+  const hypeBoost = state.marketTrend === 'up' ? 1.25 : 1;
+  let price = base * trendMult * newsMult * itemMult * qualityFactor * hypeBoost;
+
+  // Trait-Einfluss
+  // Näherung: nimm den "Top-Strain" aus dem Pool (höchster Anteil) – hier vereinfachend den letzten geernteten (not tracked),
+  // daher nutzen wir den Durchschnitt und addieren Traits des ersten Strains mit Seeds als Näherung.
+  // Für konkreten Einfluss beim Verkauf: nutze den häufigsten Seed-Strain falls vorhanden.
+  const candidateId = Object.entries(state.seeds || {}).sort((a, b) => (b[1] || 0) - (a[1] || 0))[0]?.[0];
+  if (candidateId) {
+    const strain = getStrain(state, candidateId);
+    if (strain?.traits) {
+      for (const t of strain.traits) {
+        if (t.type === 'price') {
+          price *= 1 + t.value;
+        }
+      }
+    }
+  }
+
+  return price;
 };
 
 export const sellGrams = (state: GameState, grams: number) => {

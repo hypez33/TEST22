@@ -53,11 +53,16 @@ export const DIFFICULTIES = {
 export const PEST_GLOBAL_RATE = 0.25;
 
 export const POSSIBLE_TRAITS: Record<string, StrainTrait> = {
-  resin_rich: { id: 'resin_rich', name: 'Harzig', type: 'quality', value: 0.1, desc: 'Mehr Harz, bessere Qualität' },
-  drought_resist: { id: 'drought_resist', name: 'Dürreresistent', type: 'water', value: -0.15, desc: 'Weniger Wasserverbrauch' },
-  fast_bloom: { id: 'fast_bloom', name: 'Schnellblüher', type: 'growth', value: -0.12, desc: 'Kürzere Wachstumszeit' },
+  resin_rich: { id: 'resin_rich', name: 'Harzig', type: 'quality', value: 0.25, desc: 'Mehr Harz, bessere Qualität' },
+  drought_resist: { id: 'drought_resist', name: 'Dürreresistent', type: 'water', value: -0.5, desc: 'Weniger Wasserverbrauch (-50%)' },
+  fast_bloom: { id: 'fast_bloom', name: 'Schnellblüher', type: 'growth', value: -0.2, desc: 'Wachstum -20% Zeit' },
   mold_prone: { id: 'mold_prone', name: 'Schimmelanfällig', type: 'pest', value: 0.25, desc: 'Höheres Schimmelrisiko', isNegative: true },
-  yield_boost: { id: 'yield_boost', name: 'Ertragreich', type: 'yield', value: 0.14, desc: 'Mehr Ertrag pro Ernte' }
+  yield_boost: { id: 'yield_boost', name: 'Ertragreich', type: 'yield', value: 0.4, desc: 'Ertrag +40%' },
+  genetic_masterpiece: { id: 'genetic_masterpiece', name: 'Genetic Masterpiece', type: 'price', value: 0.8, desc: 'Hype-Sorte, Verkaufspreis +80%' },
+  immune_system: { id: 'immune_system', name: 'Immunsystem', type: 'pest', value: -0.9, desc: '90% weniger Schädlinge' },
+  hydro_optimized: { id: 'hydro_optimized', name: 'Hydro-Optimiert', type: 'growth', value: 0.4, desc: 'Extrem schnelles Wachstum' },
+  root_weakness: { id: 'root_weakness', name: 'Wurzelschwäche', type: 'growth', value: -0.3, desc: 'Wächst 30% langsamer', isNegative: true },
+  hermaphrodite_risk: { id: 'hermaphrodite_risk', name: 'Hermaphrodite-Risiko', type: 'quality', value: -0.5, desc: 'Qualität halbiert', isNegative: true }
 };
 
 export const EXTRA_PESTS: Record<string, Pest> = {

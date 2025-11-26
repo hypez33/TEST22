@@ -49,6 +49,10 @@ const TABS = [
 export default function Page() {
   const { state, actions, derived, ready } = useGameState();
   const [activeTab, setActiveTab] = useState('farm');
+  const offsetTabs = useMemo(
+    () => new Set(['cases', 'inventory', 'trade', 'market', 'jobs', 'estate', 'upgrades', 'research']),
+    []
+  );
   const prevLevel = useRef(state.level);
   const prevReadyQuests = useRef<string[]>([]);
   const prevCompleted = useRef<string[]>([]);
@@ -146,7 +150,7 @@ export default function Page() {
       <HeaderHUD state={state} perSec={derived.perSec} onSpeedChange={actions.setSpeed} gameClock={gameClock} />
       <SidebarNav tabs={TABS} active={activeTab} onSelect={setActiveTab} />
 
-      <main>
+      <main style={offsetTabs.has(activeTab) ? { paddingTop: '32px' } : undefined}>
         {renderTab(activeTab)}
       </main>
 

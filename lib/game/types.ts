@@ -22,7 +22,7 @@ export interface Strain {
   lineage?: { p1: string; p2: string };
 }
 
-export type TraitType = 'yield' | 'growth' | 'water' | 'pest' | 'quality' | 'price';
+export type TraitType = 'yield' | 'growth' | 'water' | 'pest' | 'quality' | 'price' | 'nutrient';
 export interface StrainTrait {
   id: string;
   name: string;

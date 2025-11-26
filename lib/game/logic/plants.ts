@@ -37,6 +37,7 @@ import {
   seedCost,
   slotUnlockCost,
   traitMultiplier,
+  traitSpeedMultiplier
 } from './shared';
 import { clamp } from '../utils';
 import { ensureProcessing, fillDryingSlots } from './processing';
@@ -137,8 +138,8 @@ export const harvestYieldDetails = (state: GameState, plant: Plant) => {
   const globalMult = globalMultiplier(state);
   const traitYield = getTraitMultiplier(state, plant, 'yield');
   const traitQuality = traitMultiplier(strain, 'quality');
-  const raw = base * flowerBonus * levelMult * researchMult * globalMult * bonus * masteryYield * timingBonus * traitYield * traitQuality;
-  const value = clampYield(raw, cap);
+  const rawBase = base * flowerBonus * levelMult * researchMult * globalMult * bonus * masteryYield * timingBonus * traitQuality;
+  const value = clampYield(rawBase * traitYield, cap);
   return {
     value,
     breakdown: {
@@ -153,7 +154,7 @@ export const harvestYieldDetails = (state: GameState, plant: Plant) => {
       traitYield,
       traitQuality,
       cap,
-      appliedCap: value < raw
+      appliedCap: value < rawBase * traitYield
     }
   };
 };
@@ -223,9 +224,13 @@ export const advancePlant = (state: GameState, plant: Plant, delta: number) => {
   const strain = getStrain(state, plant.strainId);
   const growTime = growTimeFor(state, plant);
   const res = researchEffects(state);
-  const waterTrait = Math.max(0.1, getTraitMultiplier(state, plant, 'water'));
-  const waterDrain = WATER_DRAIN_PER_SEC * (state.eventWaterMult || 1) * (1 - (res.water || 0)) * waterTrait;
-  const nutrientDrain = NUTRIENT_DRAIN_PER_SEC;
+  const waterTrait = getTraitMultiplier(state, plant, 'water');
+  const nutrientTrait = getTraitMultiplier(state, plant, 'nutrient');
+  const waterDrain = Math.max(
+    0,
+    WATER_DRAIN_PER_SEC * (state.eventWaterMult || 1) * (1 - (res.water || 0)) * Math.max(0.05, 1 - waterTrait)
+  );
+  const nutrientDrain = Math.max(0, NUTRIENT_DRAIN_PER_SEC * Math.max(0.05, 1 - nutrientTrait));
 
   let remaining = delta;
   let pgrLeft = plant.pgrBoostSec || 0;
@@ -238,7 +243,8 @@ export const advancePlant = (state: GameState, plant: Plant, delta: number) => {
 
     const d = DIFFICULTIES[state.difficulty] || DIFFICULTIES.normal;
     const traitGrowth = getTraitMultiplier(state, plant, 'growth');
-    let growthFactor = d.growth * (state.growthBonus || 1) * traitGrowth;
+    const effectiveDt = dt * (1 + traitGrowth);
+    let growthFactor = d.growth * (state.growthBonus || 1);
     let healthDelta = 0;
     let qualityDelta = 0;
 
@@ -302,10 +308,10 @@ export const advancePlant = (state: GameState, plant: Plant, delta: number) => {
     if (plant.health > 85 && goodWater && goodNutrient) growthFactor *= 1.1;
 
     if (plant.growProg < 1) {
-      plant.growProg = clamp(plant.growProg + (dt / growTime) * growthFactor, 0, 1);
+      plant.growProg = clamp(plant.growProg + (effectiveDt / growTime) * growthFactor, 0, 1);
       if (plant.growProg >= 1) plant.readyTime = 0;
     } else {
-      plant.readyTime = (plant.readyTime || 0) + dt;
+      plant.readyTime = (plant.readyTime || 0) + effectiveDt;
       if (plant.readyTime > READY_DECAY_DELAY) {
         qualityDelta -= (QUALITY_LOSS_BAD / 2) * dt;
       }
@@ -345,7 +351,7 @@ const maybeSpawnPestFor = (state: GameState, plant: Plant, strain: Strain, dt: n
   const d = DIFFICULTIES[state.difficulty] || DIFFICULTIES.normal;
   const mods = pestRiskModifiers(state);
   const pestRate = state.pestGlobalRate || 0.002;
-  const traitRisk = Math.max(0.05, traitMultiplier(strain, 'pest'));
+  const traitRisk = Math.max(0.05, getTraitMultiplier(state, plant, 'pest'));
   const stagesIdx = Math.min(STAGE_LABELS.length - 1, Math.floor(plant.growProg * STAGE_LABELS.length));
   const inFlower = STAGE_LABELS[stagesIdx] === 'Bluete';
   for (const pest of PESTS) {
